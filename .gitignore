@@ -1,0 +1,25 @@
+# Secrets
+.env
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Lean build artifacts and Mathlib cache (several GB)
+lean_project/.lake/
+
+# Generated data and run outputs
+data/index/
+runs/
+
+# Local Claude Code settings
+.claude/settings.local.json
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
