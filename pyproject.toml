@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "formal-mas"
+version = "0.1.0"
+description = "Multi-agent system for olympiad problems with RAG over Mathlib and Lean 4 verification"
+requires-python = ">=3.10"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-m 'not slow'"
+markers = ["slow: needs Lean + Mathlib (run with `pytest -m slow`)"]

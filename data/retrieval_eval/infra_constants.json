@@ -1,0 +1,82 @@
+{
+  "threshold_pct": 1.0,
+  "population": 80794,
+  "constants": [
+    {
+      "name": "mul_one",
+      "pct": 3.222
+    },
+    {
+      "name": "one_mul",
+      "pct": 2.105
+    },
+    {
+      "name": "add_zero",
+      "pct": 1.888
+    },
+    {
+      "name": "mul_comm",
+      "pct": 1.874
+    },
+    {
+      "name": "zero_add",
+      "pct": 1.845
+    },
+    {
+      "name": "Finset.sum_congr",
+      "pct": 1.811
+    },
+    {
+      "name": "mul_assoc",
+      "pct": 1.688
+    },
+    {
+      "name": "MulZeroClass.mul_zero",
+      "pct": 1.61
+    },
+    {
+      "name": "Nat.cast_one",
+      "pct": 1.461
+    },
+    {
+      "name": "map_zero",
+      "pct": 1.416
+    },
+    {
+      "name": "map_mul",
+      "pct": 1.332
+    },
+    {
+      "name": "MulZeroClass.zero_mul",
+      "pct": 1.264
+    },
+    {
+      "name": "LE.le.trans",
+      "pct": 1.249
+    },
+    {
+      "name": "pow_zero",
+      "pct": 1.166
+    },
+    {
+      "name": "le_antisymm",
+      "pct": 1.13
+    },
+    {
+      "name": "add_comm",
+      "pct": 1.103
+    },
+    {
+      "name": "one_ne_zero",
+      "pct": 1.059
+    },
+    {
+      "name": "le_refl",
+      "pct": 1.046
+    },
+    {
+      "name": "one_smul",
+      "pct": 1.03
+    }
+  ]
+}

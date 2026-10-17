@@ -1,0 +1,53 @@
+{
+  "created_utc": "2026-10-17T04:26:40+00:00",
+  "mathlib_commit": "625d8914199bc567cca9b91f90e8e5afafa5ae51",
+  "seed": 2026,
+  "size": 200,
+  "gold_method": "c: proof-term constants in corpus, minus Mathlib.Tactic and infrastructure, whose last name component is written in the proof (gold_b = method b)",
+  "gold_range": [
+    1,
+    10
+  ],
+  "infra_pct": 1.0,
+  "population": 80794,
+  "candidates": {
+    "algebra": {
+      "concrete": 9783,
+      "abstract": 34515
+    },
+    "number_theory": {
+      "concrete": 4486,
+      "abstract": 1283
+    },
+    "combinatorics": {
+      "concrete": 3035,
+      "abstract": 4176
+    }
+  },
+  "corpus_eval_size": 212679,
+  "q": {
+    "n": 200,
+    "by_split": {
+      "dev": 134,
+      "test": 66
+    },
+    "by_area": {
+      "algebra": 67,
+      "number_theory": 67,
+      "combinatorics": 66
+    },
+    "by_type": {
+      "concrete": 200
+    },
+    "cells": {
+      "dev/algebra/concrete": 45,
+      "dev/combinatorics/concrete": 44,
+      "dev/number_theory/concrete": 45,
+      "test/algebra/concrete": 22,
+      "test/combinatorics/concrete": 22,
+      "test/number_theory/concrete": 22
+    },
+    "mean_gold": 2.85,
+    "mean_gold_b": 4.295
+  }
+}
