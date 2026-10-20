@@ -1,0 +1,18 @@
+# Pipeline hyperparameters (k_max, r_max, N, b_max, Lean timeout... arrive in later phases).
+# Models are never named here: they live in config/models.yaml.
+
+retrieval:
+  # Chosen on Q-dev in Phase 1.4 (2026-10-17): RRF over BM25 and the dense model
+  # `embeddings.selected` (models.yaml), query with the model's instruction, k = 16.
+  method: rrf               # rrf (BM25 + dense) | bm25 | dense
+  k: 16                     # lemmas returned to the Generator (~1.5k tokens of name + signature)
+  depth: 100                # candidates taken from each ranker before fusion
+  rrf_k: 60                 # RRF constant: score(d) = sum 1 / (rrf_k + rank)
+  query_instruction: true   # prepend the dense model's query instruction
+  # Second query with concrete carriers (ℝ, ℤ, …) replaced by a type variable, fused by RRF
+  # with the original one (retriever.generalize_query). Adopted 2026-10-19 after a manual
+  # error analysis (generic lemmas such as two_mul_le_add_sq ranked behind Real.*), checked
+  # on Q-dev only; Q-test re-evaluated once afterwards (PLAN.md 1.5).
+  generic_query: true
+  index_dir: data/index/full   # system index built from the FULL corpus (not corpus_eval)
+  suggestions: 5            # max names suggested for an `unknown identifier` error

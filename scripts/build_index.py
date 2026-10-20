@@ -13,12 +13,18 @@ vectors `--from-vectors DIR` builds two exact cosine indexes (`IndexFlatIP` over
     data/index/full/<key>/  the system's index (whole corpus, used by the Retriever)
     data/index/eval/<key>/  evaluation index = corpus minus the queries of Q (the
                             declarations of corpus_eval.jsonl), with the query vectors
-`--embed KEY` does the same on the local CPU.
+`--embed KEY` does the same on the local CPU. `--bm25` saves the BM25 index of the full
+corpus and its lemma table (names, signatures) to data/index/full/bm25/, so the Retriever
+does not rebuild it at every start. `--extra-names` runs scripts/extract_names.lean and
+saves the theorem names of Init/Std/Batteries (data/index/full/names_extra.json): they feed
+only the `unknown identifier` suggestions and are never added to the search index.
 
 Usage:
     python scripts/build_index.py [--module-prefix Mathlib] [--skip-extract]
     python scripts/build_index.py --from-vectors data/index/kaggle/output
     python scripts/build_index.py --embed bge-small
+    python scripts/build_index.py --bm25
+    python scripts/build_index.py --extra-names
 """
 
 from __future__ import annotations
@@ -44,8 +50,15 @@ from formal_mas.retrieval.corpus import (  # noqa: E402
     read_raw,
     write_jsonl,
 )
+from formal_mas.retrieval.retriever import (  # noqa: E402
+    BM25_DIR,
+    EXTRA_NAMES_FILE,
+    build_extra_names,
+    build_lexical_index,
+)
 
 EXTRACT_SCRIPT = ROOT / "scripts" / "extract_corpus.lean"
+NAMES_SCRIPT = ROOT / "scripts" / "extract_names.lean"
 
 
 def mathlib_commit(lean_project: Path) -> str | None:
@@ -58,14 +71,17 @@ def mathlib_commit(lean_project: Path) -> str | None:
 
 def run_extraction(lean_project: Path, raw_path: Path, module_prefix: str) -> None:
     """Dump the environment with Lean. Raises CalledProcessError if Lean fails."""
-    raw_path.parent.mkdir(parents=True, exist_ok=True)
-    env = {
-        **os.environ,
+    run_lean_dump(lean_project, EXTRACT_SCRIPT, {
         "FORMAL_MAS_CORPUS_OUT": str(raw_path.resolve()),
         "FORMAL_MAS_MODULE_PREFIX": module_prefix,
-    }
+    }, raw_path)
+
+
+def run_lean_dump(lean_project: Path, script: Path, env_vars: dict[str, str], out_path: Path) -> None:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    env = {**os.environ, **env_vars}
     proc = subprocess.run(
-        ["lake", "env", "lean", str(EXTRACT_SCRIPT)],
+        ["lake", "env", "lean", str(script)],
         cwd=lean_project,
         env=env,
         capture_output=True,
@@ -178,6 +194,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--from-vectors", type=Path, metavar="DIR",
                         help="stage 2 only: build full/ and eval/ indexes from embedded folders in DIR")
     parser.add_argument("--embed", metavar="KEY", help="stage 2 only: embed on CPU, then build the indexes")
+    parser.add_argument("--bm25", action="store_true",
+                        help="stage 2 only: build the persisted BM25 index of the full corpus (full/bm25)")
+    parser.add_argument("--extra-names", action="store_true",
+                        help="stage 2 only: dump Init/Std/Batteries theorem names for suggest_names "
+                             "(full/names_extra.json; never added to the search index)")
     parser.add_argument("--chunk", type=int, default=10_000, help="--embed: texts per resumable chunk")
     parser.add_argument("--batch-size", type=int, default=32)
     args = parser.parse_args(argv)
@@ -188,6 +209,17 @@ def main(argv: list[str] | None = None) -> None:
         args.from_vectors = vec_dir
     if args.from_vectors:
         build_from_vectors(args.from_vectors, args.out)
+    if args.bm25:
+        build_lexical_index(args.out / "corpus.jsonl", args.out / "full" / BM25_DIR)
+        print(f"wrote BM25 index to {args.out / 'full' / BM25_DIR}")
+    if args.extra_names:
+        raw = args.out / "names_extra_raw.jsonl"
+        run_lean_dump(args.lean_project, NAMES_SCRIPT, {"FORMAL_MAS_NAMES_OUT": str(raw.resolve())}, raw)
+        lean_meta = {"toolchain": (args.lean_project / "lean-toolchain").read_text(encoding="utf-8").strip(),
+                     "mathlib_commit": mathlib_commit(args.lean_project)}
+        n = build_extra_names(raw, args.out / "full" / EXTRA_NAMES_FILE, lean_meta)
+        print(f"wrote {n} Init/Std/Batteries theorem names to {args.out / 'full' / EXTRA_NAMES_FILE}")
+    if args.from_vectors or args.bm25 or args.extra_names:
         return
 
     raw_path = args.out / "corpus_raw.jsonl"

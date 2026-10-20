@@ -7,14 +7,17 @@ The index is a sparse term-document matrix, so scoring a query is one sparse pro
 
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter
+from pathlib import Path
 from typing import Sequence
 
 import numpy as np
 from scipy import sparse
 
 _WORD_RE = re.compile(r"[^\W\d_]+|\d+|[^\w\s(){}\[\],:∥]")
+K1, B = 1.2, 0.75  # Okapi defaults
 _CAMEL_RE = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|[^A-Za-z]+")
 
 
@@ -29,7 +32,7 @@ def tokenize(text: str) -> list[str]:
 
 
 class BM25:
-    def __init__(self, texts: Sequence[str], k1: float = 1.2, b: float = 0.75):
+    def __init__(self, texts: Sequence[str], k1: float = K1, b: float = B):
         self.vocab: dict[str, int] = {}
         rows, cols, vals = [], [], []
         lengths = np.empty(len(texts), dtype=np.float32)
@@ -49,6 +52,20 @@ class BM25:
         row_norm = np.repeat(norm, np.diff(tf.indptr))
         tf.data = tf.data * (k1 + 1) / (tf.data + row_norm)
         self.matrix = tf.tocsc()
+
+    def save(self, folder: Path) -> None:
+        folder.mkdir(parents=True, exist_ok=True)
+        sparse.save_npz(folder / "bm25_matrix.npz", self.matrix)
+        np.save(folder / "bm25_idf.npy", self.idf)
+        (folder / "bm25_vocab.json").write_text(json.dumps(self.vocab, ensure_ascii=False), encoding="utf-8")
+
+    @classmethod
+    def load(cls, folder: Path) -> "BM25":
+        bm = cls.__new__(cls)
+        bm.matrix = sparse.load_npz(folder / "bm25_matrix.npz").tocsc()
+        bm.idf = np.load(folder / "bm25_idf.npy")
+        bm.vocab = json.loads((folder / "bm25_vocab.json").read_text(encoding="utf-8"))
+        return bm
 
     def scores(self, query: str) -> np.ndarray:
         ids = [self.vocab[t] for t in set(tokenize(query)) if t in self.vocab]

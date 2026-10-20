@@ -8,6 +8,11 @@ one, and (b) `gold_b`, as a sensitivity check.
 The evaluation index is built from corpus_eval.jsonl (corpus minus the queries in Q, so a
 query cannot retrieve itself); the system's final index uses the full corpus.jsonl.
 
+For the selected model (models.yaml → embeddings.selected) the script also scores
+`rrf(bm25+<key>/instr)+generic`: the Retriever's `generic_query` method, i.e. RRF over BM25
+and dense rankings of the query and of `generalize_query(query)`. The generalised queries are
+encoded on CPU (fp32); the original ones reuse the vectors embedded with the corpus.
+
 Only the dev split is used for model and k selection. `--split test` is for the single
 final report and requires `--final`.
 
@@ -27,9 +32,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from formal_mas.config import load_models  # noqa: E402
 from formal_mas.retrieval.bm25 import BM25  # noqa: E402
 from formal_mas.retrieval.corpus import load_jsonl  # noqa: E402
 from formal_mas.retrieval.evaluate import evaluate, rrf  # noqa: E402
+from formal_mas.retrieval.retriever import generalize_query  # noqa: E402
 
 KS = (4, 8, 16, 32)
 GOLDS = {"c": "gold", "b": "gold_b"}
@@ -67,6 +74,25 @@ def dense_rankings(key: str, index_root: Path, q: list[dict], depth: int) -> dic
     return out
 
 
+def generic_dense_rankings(key: str, index_root: Path, generic: list[str | None], depth: int) -> list[list[str]]:
+    """Dense rankings of the generalised queries (instruction on); [] where there is none."""
+    import faiss
+
+    from formal_mas.retrieval.encoders import Encoder, load_specs
+
+    folder = index_root / key
+    index = faiss.read_index(str(folder / "index.faiss"))
+    names = json.loads((folder / "names.json").read_text(encoding="utf-8"))
+    todo = [i for i, g in enumerate(generic) if g]
+    out: list[list[str]] = [[] for _ in generic]
+    if todo:
+        spec = load_specs()[key]
+        _, ids = index.search(Encoder(spec).encode([spec.query_text(generic[i], True) for i in todo]), depth)
+        for i, row in zip(todo, ids):
+            out[i] = [names[j] for j in row if j >= 0]
+    return out
+
+
 def to_markdown(results: dict, gold: str) -> str:
     cols = [f"R@{k}" for k in KS] + ["MRR"]
     lines = [f"| Method ({gold}) | " + " | ".join(cols) + " |", "|---|" + "---|" * len(cols)]
@@ -99,6 +125,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--corpus", type=Path, default=ROOT / "data" / "index" / "corpus_eval.jsonl")
     parser.add_argument("--depth", type=int, default=100, help="list length for MRR and RRF")
     parser.add_argument("--out", type=Path, default=ROOT / "data" / "retrieval_eval")
+    parser.add_argument("--stem", help="output file stem (default: results_<split>)")
+    parser.add_argument("--note", help="free-text note stored in the JSON and Markdown outputs")
     args = parser.parse_args(argv)
     if args.split == "test" and not args.final:
         parser.error("Q-test is reserved for the single final report: pass --final")
@@ -114,26 +142,37 @@ def main(argv: list[str] | None = None) -> None:
     names = [r["name"] for r in corpus]
     del corpus
     rankings = {"bm25": [[names[i] for i, _ in bm25.top(t, args.depth)] for t in queries]}
+    generic = [generalize_query(t) for t in queries]
+    bm25_generic = [[names[i] for i, _ in bm25.top(g, args.depth)] if g else [] for g in generic]
     del bm25
 
+    selected = load_models()["embeddings"]["selected"]
     for key in keys:
         dense = dense_rankings(key, index_root, q, args.depth)
         rankings.update(dense)
         for label, ranked in dense.items():
             rankings[f"rrf(bm25+{label})"] = [rrf([b, d], args.depth) for b, d in zip(rankings["bm25"], ranked)]
+        if key == selected and f"{key}/instr" in dense:
+            dense_generic = generic_dense_rankings(key, index_root, generic, args.depth)
+            rankings[f"rrf(bm25+{key}/instr)+generic"] = [
+                rrf([lst for lst in four if lst], args.depth)
+                for four in zip(rankings["bm25"], dense[f"{key}/instr"], bm25_generic, dense_generic)]
 
     results = {m: {g: evaluate(r, [x[field] for x in q], KS) for g, field in GOLDS.items()}
                for m, r in rankings.items()}
 
     args.out.mkdir(parents=True, exist_ok=True)
-    stem = args.out / f"results_{args.split}"
+    stem = args.out / (args.stem or f"results_{args.split}")
     payload = {
         "created_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "split": args.split, "n": len(q), "ks": list(KS), "depth": args.depth,
-        "corpus": args.corpus.name, "results": results,
+        "corpus": args.corpus.name, "n_generalized": sum(g is not None for g in generic),
+        **({"note": args.note} if args.note else {}), "results": results,
     }
-    stem.with_suffix(".json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    stem.with_suffix(".json").write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
     md = "\n\n".join(to_markdown(results, g) for g in GOLDS)
+    if args.note:
+        md = f"> {args.note}\n\n{md}"
     stem.with_suffix(".md").write_text(md + "\n", encoding="utf-8")
     stem.with_suffix(".tex").write_text("\n\n".join(to_latex(results, g, args.split, len(q)) for g in GOLDS) + "\n",
                                         encoding="utf-8")

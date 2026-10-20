@@ -1,0 +1,35 @@
+{
+  "created": "2026-10-19",
+  "purpose": "Qualitative evidence for the generic_query retrieval method (Phase 1.5). Not a statistical evaluation.",
+  "index": "data/index/full (full corpus, system index)",
+  "method_V0": "rrf(bm25 + e5-base/instr), k = 16 (Phase 1.4 choice)",
+  "method_V1": "V0 + generic second query: RRF over BM25 and E5 rankings of the query and of generalize_query(query) (config/pipeline.yaml: generic_query: true)",
+  "rank": "1-based rank of the first gold lemma in the fused list (depth 100 per ranker); null = not in the fused list (beyond ~100)",
+  "selection_caveat": "Probes chosen by hand (2 reported by the team, 5 typical olympiad lemmas: inequalities, divisibility, sums). The type variable `R` (vs `α`) was chosen looking at the first two probes, so this set is not held out.",
+  "diagnosis_unbounded_ranks": {
+    "note": "Rank of the gold lemma over the whole full index for the original query, each ranker alone (2026-10-19).",
+    "sq_nonneg": {"query": "(x : ℝ) : 0 ≤ x ^ 2", "bm25": 2255, "e5_instr": 658, "bm25_with_R": 94, "e5_instr_with_R": 200},
+    "two_mul_le_add_sq": {"query": "(a b : ℝ) : 2 * a * b ≤ a ^ 2 + b ^ 2", "bm25": 151, "e5_instr": 33, "bm25_with_R": 26, "e5_instr_with_R": 7},
+    "causes": [
+      "BM25: the token ℝ (idf 2.56) adds 3-4.4 points to every Real.* lemma and 0 to generic lemmas",
+      "BM25 length normalisation: generic signatures carry many typeclass binders ([Semiring R] [LinearOrder R] ...), lowering the weight of matched symbols",
+      "Variable names differ (query x, lemma a) and Mathlib names (sq, nonneg, dvd) are not in the symbolic query",
+      "E5: the embedding of a query with ℝ lands among Real.* lemmas (Real.lt_sqrt, Real.rpow_nonneg, ...)"
+    ]
+  },
+  "probes": [
+    {"query": "(x : ℝ) : 0 ≤ x ^ 2", "gold": ["sq_nonneg"], "generalized": "(x : R) : 0 ≤ x ^ 2", "V0": null, "V1": null},
+    {"query": "(a b : ℝ) : 2 * a * b ≤ a ^ 2 + b ^ 2", "gold": ["two_mul_le_add_sq"], "generalized": "(a b : R) : 2 * a * b ≤ a ^ 2 + b ^ 2", "V0": 68, "V1": 13},
+    {"query": "(a b : ℝ) : |a + b| ≤ |a| + |b|", "gold": ["abs_add_le"], "generalized": "(a b : R) : |a + b| ≤ |a| + |b|", "V0": 6, "V1": 3},
+    {"query": "(a b : ℝ) (ha : 0 ≤ a) (hab : a ≤ b) : a ^ 2 ≤ b ^ 2", "gold": ["pow_le_pow_left₀"], "generalized": "(a b : R) (ha : 0 ≤ a) (hab : a ≤ b) : a ^ 2 ≤ b ^ 2", "V0": 16, "V1": 15},
+    {"query": "(a b c : ℤ) (h₁ : a ∣ b) (h₂ : b ∣ c) : a ∣ c", "gold": ["Dvd.dvd.trans", "dvd_trans"], "generalized": "(a b c : R) (h₁ : a ∣ b) (h₂ : b ∣ c) : a ∣ c", "V0": null, "V1": null},
+    {"query": "(a b : ℤ) (n : ℕ) : a - b ∣ a ^ n - b ^ n", "gold": ["sub_dvd_pow_sub_pow"], "generalized": "(a b : R) (n : ℕ) : a - b ∣ a ^ n - b ^ n", "V0": null, "V1": 15},
+    {"query": "(n : ℕ) (f : ℕ → ℝ) : ∑ i ∈ Finset.range (n + 1), f i = ∑ i ∈ Finset.range n, f i + f n", "gold": ["Finset.sum_range_succ"], "generalized": "(n : ℕ) (f : ℕ → R) : ∑ i ∈ Finset.range (n + 1), f i = ∑ i ∈ Finset.range n, f i + f n", "V0": 1, "V1": 1}
+  ],
+  "in_top_16": {"V0": 3, "V1": 5, "of": 7},
+  "limitations": {
+    "sq_nonneg": "Still outside the fused list with V1 (BM25 94, E5 200 for the generalised query). The query has no lexical overlap with the name (sq, nonneg) and uses x where the lemma uses a.",
+    "dvd_trans": "Still outside the fused list with V1. The lemma states its hypotheses as implications (a ∣ b → b ∣ c → a ∣ c), the query as named binders (h₁ : a ∣ b), and its signature is short and generic, so neither ranker matches it.",
+    "future_work_V2": "Appending Mathlib naming-convention words to the generalised query (0 ≤ → nonneg, ^ 2 → sq, ∣ → dvd, ...) put sq_nonneg at 16 and dvd_trans at 43 in an exploratory run, but lowered Q-dev R@16 (0.627 vs 0.634; 1 win / 2 losses) and its rules were written after seeing these probes. Not adopted."
+  }
+}

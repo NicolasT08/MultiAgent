@@ -3,3 +3,15 @@ pyyaml>=6.0
 pydantic>=2.7
 python-dotenv>=1.0
 pytest>=8.0
+
+# Phase 1 — retrieval (local embeddings, exact FAISS index, BM25 baseline).
+# torch is installed CPU-only:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch>=2.4
+numpy>=1.26
+scipy>=1.11
+sentence-transformers>=3.0
+transformers>=4.44
+faiss-cpu>=1.8
+# Kaggle CLI: embeds the corpus on a free Kaggle GPU (scripts/kaggle_job.py).
+kaggle>=1.7
