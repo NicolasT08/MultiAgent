@@ -1,0 +1,80 @@
+{
+ "meta": {
+  "lean_toolchain": "leanprover/lean4:v4.36.0-rc1",
+  "backend": "repl",
+  "repl_tag": "v4.36.0-rc1",
+  "repl_commit": "a85a1d2f4bdeab19c3d34be979ea336c9ee9b3ed",
+  "repl_modified": false,
+  "repl_toolchain": "leanprover/lean4:v4.36.0-rc1"
+ },
+ "cases": [
+  {
+   "case": "correct",
+   "code": "import Mathlib\n\n\ntheorem t (x : ℝ) : 0 ≤ x ^ 2 := sq_nonneg x\n",
+   "theorem": "t",
+   "axioms_line": 6,
+   "decls_line": 8,
+   "returncode": 0,
+   "stdout": "{\"caption\":\"\",\"data\":\"'t' depends on axioms: [propext, Classical.choice, Quot.sound]\",\"endPos\":{\"column\":6,\"line\":6},\"fileName\":\"<file>\",\"isSilent\":false,\"keepFullRange\":false,\"kind\":\"[anonymous]\",\"pos\":{\"column\":0,\"line\":6},\"severity\":\"information\"}\n{\"caption\":\"\",\"data\":\"FORMAL_MAS_DECLS [\\\"t\\\"]\",\"endPos\":{\"column\":5,\"line\":8},\"fileName\":\"<file>\",\"isSilent\":false,\"keepFullRange\":false,\"kind\":\"[anonymous]\",\"pos\":{\"column\":0,\"line\":8},\"severity\":\"information\"}\n",
+   "stderr": "",
+   "args": []
+  },
+  {
+   "case": "type_mismatch",
+   "code": "import Mathlib\n\n\ntheorem t (x : ℝ) : 0 < x ^ 2 := sq_nonneg x\n",
+   "theorem": "t",
+   "axioms_line": 6,
+   "decls_line": 8,
+   "returncode": 1,
+   "stdout": "{\"caption\":\"\",\"data\":\"Type mismatch\\n  sq_nonneg x\\nhas type\\n  0 ≤ x ^ 2\\nbut is expected to have type\\n  0 < x ^ 2\",\"endPos\":{\"column\":44,\"line\":4},\"fileName\":\"<file>\",\"isSilent\":false,\"keepFullRange\":false,\"kind\":\"[anonymous]\",\"pos\":{\"column\":33,\"line\":4},\"severity\":\"error\"}\n{\"caption\":\"\",\"data\":\"'t' depends on axioms: [propext, sorryAx, Classical.choice, Quot.sound]\",\"endPos\":{\"column\":6,\"line\":6},\"fileName\":\"<file>\",\"isSilent\":false,\"keepFullRange\":false,\"kind\":\"[anonymous]\",\"pos\":{\"column\":0,\"line\":6},\"severity\":\"information\"}\n{\"caption\":\"\",\"data\":\"FORMAL_MAS_DECLS [\\\"t\\\"]\",\"endPos\":{\"column\":5,\"line\":8},\"fileName\":\"<file>\",\"isSilent\":false,\"keepFullRange\":false,\"kind\":\"[anonymous]\",\"pos\":{\"column\":0,\"line\":8},\"severity\":\"information\"}\n",
+   "stderr": "",
+   "args": []
+  },
+  {
+   "case": "sorry",
+   "code": "import Mathlib\n\n\ntheorem t (n : ℕ) : n + 0 = n := by\n  sorry\n",
+   "theorem": "t",
+   "axioms_line": 7,
+   "decls_line": 9,
+   "returncode": 0,
+   "stdout": "{\"caption\":\"\",\"data\":\"declaration uses `sorry`\",\"endPos\":{\"column\":9,\"line\":4},\"fileName\":\"<file>\",\"isSilent\":false,\"keepFullRange\":false,\"kind\":\"hasSorry\",\"pos\":{\"column\":8,\"line\":4},\"severity\":\"warning\"}\n{\"caption\":\"\",\"data\":\"'t' depends on axioms: [sorryAx]\",\"endPos\":{\"column\":6,\"line\":7},\"fileName\":\"<file>\",\"isSilent\":false,\"keepFullRange\":false,\"kind\":\"[anonymous]\",\"pos\":{\"column\":0,\"line\":7},\"severity\":\"information\"}\n{\"caption\":\"\",\"data\":\"FORMAL_MAS_DECLS [\\\"t\\\"]\",\"endPos\":{\"column\":5,\"line\":9},\"fileName\":\"<file>\",\"isSilent\":false,\"keepFullRange\":false,\"kind\":\"[anonymous]\",\"pos\":{\"column\":0,\"line\":9},\"severity\":\"information\"}\n",
+   "stderr": "",
+   "args": []
+  },
+  {
+   "case": "native_decide",
+   "code": "import Mathlib\n\n\ntheorem t : 123456789 * 987654321 = 121932631112635269 := by native_decide\n",
+   "theorem": "t",
+   "axioms_line": 6,
+   "decls_line": 8,
+   "returncode": 0,
+   "stdout": "{\"caption\":\"\",\"data\":\"'t' depends on axioms: [t._native.native_decide.ax_1_1]\",\"endPos\":{\"column\":6,\"line\":6},\"fileName\":\"<file>\",\"isSilent\":false,\"keepFullRange\":false,\"kind\":\"[anonymous]\",\"pos\":{\"column\":0,\"line\":6},\"severity\":\"information\"}\n{\"caption\":\"\",\"data\":\"FORMAL_MAS_DECLS [\\\"t\\\",\\\"t._native.native_decide.ax_1_1\\\"]\",\"endPos\":{\"column\":5,\"line\":8},\"fileName\":\"<file>\",\"isSilent\":false,\"keepFullRange\":false,\"kind\":\"[anonymous]\",\"pos\":{\"column\":0,\"line\":8},\"severity\":\"information\"}\n",
+   "stderr": "",
+   "args": []
+  },
+  {
+   "case": "extra_def",
+   "code": "import Mathlib\n\n\ndef helper : ℕ := 5\n\ntheorem t : helper = 5 := rfl\n",
+   "theorem": "t",
+   "axioms_line": 8,
+   "decls_line": 10,
+   "returncode": 0,
+   "stdout": "{\"caption\":\"\",\"data\":\"'t' does not depend on any axioms\",\"endPos\":{\"column\":6,\"line\":8},\"fileName\":\"<file>\",\"isSilent\":false,\"keepFullRange\":false,\"kind\":\"[anonymous]\",\"pos\":{\"column\":0,\"line\":8},\"severity\":\"information\"}\n{\"caption\":\"\",\"data\":\"FORMAL_MAS_DECLS [\\\"t\\\",\\\"helper\\\"]\",\"endPos\":{\"column\":5,\"line\":10},\"fileName\":\"<file>\",\"isSilent\":false,\"keepFullRange\":false,\"kind\":\"[anonymous]\",\"pos\":{\"column\":0,\"line\":10},\"severity\":\"information\"}\n",
+   "stderr": "",
+   "args": []
+  },
+  {
+   "case": "memory_limit",
+   "code": "import Mathlib\n\n#eval (List.range 150000000).foldl (· + ·) 0 + (List.range 150000000).length\n",
+   "theorem": null,
+   "axioms_line": null,
+   "decls_line": null,
+   "returncode": 3221226505,
+   "stdout": "",
+   "stderr": "libc++abi: terminating due to uncaught exception of type lean::memory_exception: excessive memory consumption detected at 'interpreter' (potential solution: increase memory consumption threshold)\n",
+   "args": [
+    "--memory=2048"
+   ]
+  }
+ ]
+}

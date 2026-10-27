@@ -10,6 +10,8 @@ __pycache__/
 
 # Lean build artifacts and Mathlib cache (several GB)
 lean_project/.lake/
+# Lean REPL clone + build (scripts/build_repl.sh)
+lean_repl/
 
 # Generated data and run outputs
 data/index/

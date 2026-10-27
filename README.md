@@ -99,6 +99,10 @@ formal-mas/
 │   ├── config.py                # loads models.yaml and pipeline.yaml
 │   ├── agents/
 │   │   └── contracts.py         # Pydantic I/O contracts (LemmaHit)
+│   ├── lean/
+│   │   ├── runner.py            # compiles Lean (REPL, fallback per file), acceptance (Eq. 2)
+│   │   ├── sanitize.py          # rejects unsafe generated Lean (escapes, metaprogramming, IO…)
+│   │   └── statement.py         # parses theorems; builds proof files, skeletons, subgoal lemmas
 │   └── retrieval/
 │       ├── corpus.py            # turns the Lean environment dump into corpus entries
 │       ├── reference_set.py     # builds the reference set Q and its gold lemmas
@@ -109,6 +113,8 @@ formal-mas/
 │
 ├── scripts/
 │   ├── setup_lean.sh            # installs elan/Lean 4 and builds lean_project/
+│   ├── build_repl.sh            # builds the Lean REPL (pinned tag/commit) in lean_repl/
+│   ├── capture_lean_fixtures.py # records real Lean outputs for the runner tests
 │   ├── extract_corpus.lean      # dumps Mathlib theorems from the Lean environment
 │   ├── extract_proof_consts.lean# dumps proof-term constants (gold lemmas of Q)
 │   ├── extract_names.lean       # dumps Init/Std/Batteries theorem names
@@ -119,13 +125,14 @@ formal-mas/
 │   └── eval_retrieval.py        # Recall@k / MRR of every method
 │
 ├── lean_project/                # Lean 4 + Mathlib project (pinned versions)
+├── lean_repl/                   # Lean REPL clone + build (generated, not in git)
 ├── data/
 │   ├── retrieval_eval/          # Q (q_dev.jsonl, q_test.jsonl) and evaluation results
 │   └── index/                   # generated corpus and indexes (not in git)
 └── tests/                       # offline unit tests (+ one slow Lean integration test)
 ```
 
-`data/index/`, `runs/`, `lean_project/.lake/` and `.env` are git-ignored.
+`data/index/`, `runs/`, `lean_project/.lake/`, `lean_repl/` and `.env` are git-ignored.
 
 ---
 
@@ -179,7 +186,22 @@ theorem smoke (x : ℝ) : 0 ≤ x ^ 2 := sq_nonneg x
 #print axioms smoke
 ```
 
-### 3.4 Retrieval data
+The ~30 s assumes the Mathlib `.olean` files (~6 GB) are in the OS file cache. Cold,
+on a hard disk, the first `import Mathlib` can take ~30 min (random reads of memory-
+mapped files); keep `lean_project/` on an SSD if possible.
+
+### 3.4 Lean REPL (proof checking back-end)
+
+```bash
+bash scripts/build_repl.sh
+```
+
+Clones [leanprover-community/repl](https://github.com/leanprover-community/repl) at tag
+`v4.36.0-rc1` (commit `a85a1d2f4bdeab19c3d34be979ea336c9ee9b3ed`, same toolchain as
+`lean_project/`) into `lean_repl/`, checks the pinned commit and builds it (~1 min).
+Without it the runner falls back to `lake env lean` per file (~32 s per check).
+
+### 3.5 Retrieval data
 
 The indexes are not versioned, so they must be rebuilt once. The reference set Q
 is already in `data/retrieval_eval/`.
@@ -231,7 +253,45 @@ r.suggest_names("nat.succ_le_iff")    # ['Nat.succ_le_iff', …]
 Start-up takes ~14 s on CPU (model and indexes load once); a query takes ~200 ms
 median.
 
-### 4.2 Evaluating retrieval
+### 4.2 Checking proofs with Lean
+
+```python
+from formal_mas.lean.runner import LeanRunner, accepted
+
+code = "import Mathlib\n\ntheorem t (x : ℝ) : 0 ≤ x ^ 2 := sq_nonneg x\n"
+with LeanRunner() as lean:            # reads config/pipeline.yaml → lean
+    res = lean.verify(code, theorem="t")
+    print(res.status, res.backend, res.axioms)   # finished repl ['propext', 'Classical.choice', 'Quot.sound']
+    print(accepted(res))                         # (True, 'accepted')
+    for m in res.errors:
+        print(m.line, m.column, m.text)
+```
+
+The first call starts the REPL and loads the base imports once (~33 s warm); later
+checks take ~0.01–0.5 s. `accepted` implements Eq. 2: Lean finished, no errors, no
+`sorry`, the theorem's axioms ⊆ {`propext`, `Classical.choice`, `Quot.sound`}, and the
+code declared nothing but the theorem (and Lean's auxiliaries for it).
+Hangs (`timeout`, final), memory blow-ups (`memory_limit`) and REPL crashes (`crash`) kill
+the process tree and restart the REPL before the next check; if the REPL cannot start, the
+runner uses `lake env lean --json` per file, logs a `lean_runner_warning` event and marks
+the run as degraded (`lean.run_info()`, to be stored in `run_config.json`). Identical
+checks are answered from an in-memory cache.
+
+Generated Lean never touches the statement: `statement.py` builds every file and pastes
+only model-written tactic blocks and subgoal propositions, after `sanitize.py` checks them.
+
+```python
+from formal_mas.lean.statement import assemble, parse_theorem, skeleton, subgoal_lemma
+
+thm = parse_theorem("theorem amgm (a b : ℝ) (h₁ : a + b = 10) : a * b ≤ 25 := by sorry")
+subgoals = ["0 ≤ (a - b) ^ 2", "(a + b) ^ 2 = 100"]
+plan = skeleton(thm, subgoals, "nlinarith [h1, h2]")          # compile; `compiles(res)` → plan type-checks
+name, code = subgoal_lemma(thm, subgoals, 2, "rw [h₁]\nnorm_num")   # amgm_sg2 with h1 as hypothesis
+final = assemble(thm, subgoals, ["positivity", "rw [h₁]\nnorm_num"], "nlinarith [h1, h2]")
+# unsafe text (e.g. "exact h\ntheorem evil : False := sorry") raises statement.UnsafeLean
+```
+
+### 4.3 Evaluating retrieval
 
 ```bash
 python scripts/eval_retrieval.py                     # dev split, every built index
@@ -243,26 +303,33 @@ Results are written to `data/retrieval_eval/results_<split>.{json,md,tex}`.
 Model and *k* selection must use the dev split only; the test split is reserved for
 the final numbers.
 
-### 4.3 Configuration
+### 4.4 Configuration
 
 - **Models** are defined only in `config/models.yaml`. To change the embedding model,
   edit `embeddings.selected` (and rebuild its index); never write model names in code.
 - **Retrieval hyperparameters** live in `config/pipeline.yaml` → `retrieval`:
   `method` (`rrf` | `bm25` | `dense`), `k`, `depth`, `rrf_k`, `query_instruction`,
   `generic_query`, `index_dir`, `suggestions`.
+- **Lean runner** settings live in `config/pipeline.yaml` → `lean`: `backend`
+  (`repl` | `file`), `base_imports`, `timeout_s`, `startup_timeout_s`, `restart_every`,
+  `restart_memory_mb`, `kill_memory_mb`, `cache_size`.
 
-### 4.4 Tests
+### 4.5 Tests
 
 ```bash
-pytest              # offline unit tests (toy corpus, fake encoder, no downloads)
-pytest -m slow      # integration test with real Lean + Mathlib (~1 min)
+pytest              # offline unit tests (toy corpus, fake encoder, fake REPL, recorded Lean outputs)
+pytest -m slow      # integration tests with real Lean + Mathlib (~2.5 min warm)
 ```
+
+The runner tests parse real Lean outputs stored in `tests/fixtures/lean/`; re-record
+them with `python scripts/capture_lean_fixtures.py` when the Lean version changes.
 
 ---
 
 ## 5. Reproducibility
 
-- Lean and Mathlib versions are pinned in `lean_project/`.
+- Lean and Mathlib versions are pinned in `lean_project/`; the Lean REPL tag and commit
+  are pinned in `scripts/build_repl.sh` (`runner.repl_env_info()` reports them).
 - Index metadata (`data/index/*/<model>/meta.json`, `data/retrieval_eval/meta.json`)
   records the model, Hugging Face revision, precision, corpus hash and Mathlib commit.
 - The reference set split uses seed 2026, stratified by area.

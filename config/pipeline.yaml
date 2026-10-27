@@ -1,4 +1,4 @@
-# Pipeline hyperparameters (k_max, r_max, N, b_max, Lean timeout... arrive in later phases).
+# Pipeline hyperparameters (k_max, r_max, N, b_max... arrive in later phases).
 # Models are never named here: they live in config/models.yaml.
 
 retrieval:
@@ -16,3 +16,23 @@ retrieval:
   generic_query: true
   index_dir: data/index/full   # system index built from the FULL corpus (not corpus_eval)
   suggestions: 5            # max names suggested for an `unknown identifier` error
+
+lean:
+  # Back-end chosen 2026-10-25 (PLAN.md Phase 2): the Lean REPL keeps Mathlib loaded
+  # (~0.01-0.5 s per check vs ~32 s for `lake env lean` per file). Fallback: per file.
+  backend: repl             # repl | file
+  project_dir: lean_project
+  repl_dir: lean_repl       # built by scripts/build_repl.sh (tag v4.36.0-rc1)
+  # Imports of the REPL's environment 0. Code whose imports are a subset runs in the REPL;
+  # any other import goes to the file back-end. Keep it closed under Mathlib (Aesop is
+  # imported by Mathlib, listed so that miniF2F headers `import Mathlib / import Aesop` fit).
+  base_imports: [Mathlib, Aesop]
+  timeout_s: 60             # wall clock per verification; on expiry the REPL is restarted
+  startup_timeout_s: 2400   # import Mathlib: ~33 s warm, ~28 min cold on an HDD
+  restart_every: 500        # preventive restart after N commands (REPL never frees envs)
+  restart_memory_mb: 6000   # preventive restart when the REPL exceeds this after a command
+  kill_memory_mb: 12000     # kill (status memory_limit) when a command exceeds this; also `lean -M`
+  memory_poll_s: 0.5
+  cache_size: 4096          # identical verifications answered from memory (0 = off)
+  # The file back-end's wall-clock limit is timeout_s + the import time it measures once
+  # (not startup_timeout_s); runs that use it are marked degraded (runner.run_info()).
