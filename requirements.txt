@@ -17,3 +17,6 @@ faiss-cpu>=1.8
 psutil>=5.9
 # Kaggle CLI: embeds the corpus on a free Kaggle GPU (scripts/kaggle_job.py).
 kaggle>=1.7
+# Phase 3 — LLM client (OpenAI-compatible: DeepSeek in `experiment`, Gemini in `dev`).
+# Pinned: the client relies on its exception classes and on `model_dump()` of responses.
+openai==3.39.0

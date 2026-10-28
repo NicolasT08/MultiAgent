@@ -25,3 +25,9 @@ runs/
 Thumbs.db
 .vscode/
 .idea/
+
+# LLM response cache (config/pipeline.yaml → llm.cache_dir)
+data/llm_cache/
+
+# Ledger of real LLM spend (config/pipeline.yaml → spend.ledger)
+data/spend_ledger.jsonl

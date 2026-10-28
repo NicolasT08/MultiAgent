@@ -1,5 +1,121 @@
 # Single source of truth for every model the system uses (CLAUDE.md §1.2).
-# Phase 1 only fills `embeddings`; LLM providers, models and profiles arrive in Phase 3.
+# providers (endpoint + env var of the key) → models (reusable definitions) → profiles
+# (role → model and request parameters). The profile comes from MODEL_PROFILE
+# (default: `default_profile`). Checked against the providers' docs on 2026-10-26
+# (PLAN.md Phase 3); re-check prices before every paid run.
+
+default_profile: dev
+
+providers:
+  deepseek:
+    # https://api-docs.deepseek.com/ (OpenAI format)
+    base_url: https://api.deepseek.com
+    api_key_env: DEEPSEEK_API_KEY
+  gemini:
+    # https://ai.google.dev/gemini-api/docs/openai
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+    api_key_env: GEMINI_API_KEY
+    # Free-tier limits are no longer published in the docs, only in AI Studio
+    # (https://aistudio.google.com/rate-limit); daily quotas reset at midnight Pacific.
+    # Minimum seconds between two requests to this provider (10 RPM).
+    min_interval_s: 6
+
+# Transport retries (per logical call; a retried call still counts once for b_max).
+# Retried: connection errors, timeouts, HTTP 408/409/429/5xx. Not retried: 400, 401, 402
+# (no balance), 403, 404, 422. When retries run out the problem is `provider_error`.
+retry:
+  attempts: 5
+  backoff_s: 2.0
+  backoff_factor: 2.0
+  max_backoff_s: 60.0
+  request_timeout_s: 900   # thinking calls can take minutes
+
+models:
+  deepseek-flash:
+    provider: deepseek
+    id: deepseek-flash
+    # `deepseek-flash` is an alias: DeepSeek offers no versioned id (it already moved from
+    # DeepSeek-V4-Flash to V4.1-Flash once). The client compares the `model` field of the
+    # first response of a run with this value and warns (log + console) on a mismatch.
+    # Real call on 2026-10-28 (off-peak): the API echoes the alias (`model: deepseek-flash`)
+    # and reports no version anywhere in the body, so this check only catches a renamed
+    # alias. The per-response signal of the underlying model is `system_fingerprint`
+    # (bc19ba97cbe016479903222bb1578db6 that day), recorded in trace.jsonl and run_config.json.
+    expected_version: deepseek-flash
+    json_mode: true          # response_format {"type": "json_object"}; prompt must say "json"
+    prompt_style: chat
+    thinking:
+      enabled:
+        extra_body: {thinking: {type: enabled}}
+      disabled:
+        extra_body: {thinking: {type: disabled}}
+      # Accepted but silently ignored in thinking mode: never set them on a thinking role.
+      ignores: [temperature, presence_penalty, frequency_penalty]
+    # https://api-docs.deepseek.com/quick_start/pricing — USD per 1M tokens. Billed by the
+    # UTC start time of the call. Peak: 01:00-04:00 and 06:00-10:00 UTC, Monday-Friday,
+    # excluding Chinese public holidays; everything else is off-peak (half price). Holidays
+    # are not listed here: billing them as peak over-estimates the cost (conservative).
+    pricing:
+      peak:     {input_cache_hit: 0.006, input_cache_miss: 0.30, output: 1.20}
+      off_peak: {input_cache_hit: 0.003, input_cache_miss: 0.15, output: 0.60}
+      peak_windows_utc:
+        - {days: [Mon, Tue, Wed, Thu, Fri], start: "01:00", end: "04:00"}
+        - {days: [Mon, Tue, Wed, Thu, Fri], start: "06:00", end: "10:00"}
+
+  gemini-3.8-flash:
+    provider: gemini
+    id: gemini-3.8-flash      # "New Stable" on https://ai.google.dev/gemini-api/docs/models
+    expected_version: null
+    json_mode: true           # auto-disabled by the client if the endpoint answers 400
+    prompt_style: chat
+    thinking:
+      enabled: {}             # Gemini 3.x cannot turn thinking off; use reasoning_effort
+    pricing: {free: true}     # free tier: prompts are used to improve Google's products
+
+  gemini-3.5-flash-lite:
+    provider: gemini
+    id: gemini-3.5-flash-lite
+    expected_version: null
+    json_mode: true
+    prompt_style: chat
+    thinking:
+      enabled: {}
+    pricing: {free: true}
+
+# Roles: planner, generator, autoformalizer, critic (Phase 4+) and the baselines
+# baseline_a (C1) and baseline_b (C2). `same_as: <role>` copies another role so that a
+# baseline and the agent it is compared with always share model and parameters.
+# Request keys: model, thinking (true/false), reasoning_effort, max_tokens, temperature,
+# fallbacks (other model keys, only where the profile allows them).
+profiles:
+  dev:
+    # Free. Only for debugging the code, never for tuning prompts (CLAUDE.md §1.6).
+    # Primary flash-lite, fallback 3.8-flash (team decision 2026-10-28: 3.8-flash was saturated
+    # on the free tier in the Phase 3 smoke runs, 250-385 s latencies and many 503s).
+    fallbacks_allowed: true
+    roles:
+      planner:        {model: gemini-3.5-flash-lite, thinking: true, reasoning_effort: low, max_tokens: 16384, fallbacks: [gemini-3.8-flash]}
+      generator:      {model: gemini-3.5-flash-lite, thinking: true, reasoning_effort: low, max_tokens: 16384, fallbacks: [gemini-3.8-flash]}
+      autoformalizer: {model: gemini-3.5-flash-lite, thinking: true, reasoning_effort: low, max_tokens: 16384, fallbacks: [gemini-3.8-flash]}
+      critic:         {model: gemini-3.5-flash-lite, thinking: true, reasoning_effort: minimal, max_tokens: 4096, fallbacks: [gemini-3.8-flash]}
+      baseline_a:     {same_as: autoformalizer}
+      baseline_b:     {same_as: generator}
+
+  experiment:
+    # Paid (DeepSeek). Pinned: no fallback to another model and no `-latest` ids; if the
+    # provider fails after the retries the problem is `provider_error`.
+    # Thinking on for the reasoning roles (decided 2026-10-26; calibrated in Phase 5 on ~3
+    # paid problems). max_tokens leaves room for the reasoning; `length` finishes are
+    # counted per problem and should be rare.
+    fallbacks_allowed: false
+    pinned: true
+    roles:
+      planner:        {model: deepseek-flash, thinking: true, reasoning_effort: low, max_tokens: 32768}
+      generator:      {model: deepseek-flash, thinking: true, reasoning_effort: low, max_tokens: 32768}
+      autoformalizer: {model: deepseek-flash, thinking: true, reasoning_effort: low, max_tokens: 32768}
+      critic:         {model: deepseek-flash, thinking: false, temperature: 0.0, max_tokens: 2048}
+      baseline_a:     {same_as: autoformalizer}
+      baseline_b:     {same_as: generator}
 
 embeddings:
   # Model used by the Retriever (Phase 1.5). Chosen on Q-dev (Phase 1.4, 2026-10-17):

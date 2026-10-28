@@ -36,3 +36,35 @@ lean:
   cache_size: 4096          # identical verifications answered from memory (0 = off)
   # The file back-end's wall-clock limit is timeout_s + the import time it measures once
   # (not startup_timeout_s); runs that use it are marked degraded (runner.run_info()).
+
+run:
+  seed: 2026                # recorded in run_config.json (problems run in file order; no sampling uses it yet)
+
+budget:
+  # Hard limit of LLM calls per problem (CLAUDE.md §1.5). Every logical call counts once:
+  # cache hits and the JSON repair call included; transport retries of the same call do not.
+  b_max: 16
+
+spend:
+  # Hard caps on real money (llm/spend.py). A paid call is sent only if its worst-case cost
+  # (every prompt byte as a cache-miss token + all of max_tokens as output) fits under both
+  # caps; otherwise the problem is `budget_stop` and the run ends. Only the team raises them.
+  total_usd: 9.0            # whole project (sum of the ledger, all runs)
+  run_usd: 1.0              # one run (run_eval.py --run-usd may lower it, never raise it)
+  ledger: data/spend_ledger.jsonl   # one line per paid call; outside git
+  default_max_tokens: 65536 # worst-case output when a request sets no max_tokens
+
+llm:
+  cache: true              # on-disk response cache; never turn it off without asking
+  cache_dir: data/llm_cache
+  json_repair: true         # one extra LLM call to repair unparsable JSON (counts for b_max)
+
+baselines:
+  # C1: the LLM writes only the tactic block (statement.proof_file builds the file,
+  # sanitize checks it, the runner verifies). Independent samples, no error feedback.
+  baseline_a:
+    attempts: 4
+  # C2: natural-language solution + self-assessment by the same model, never verified.
+  # A new solution is drawn while the self-assessment says "incorrect".
+  baseline_b:
+    attempts: 2

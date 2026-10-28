@@ -79,6 +79,37 @@ test was evaluated once:
 Full tables (BGE-base, BGE-M3, both gold definitions, LaTeX versions) are in
 `data/retrieval_eval/`.
 
+### 1.3 LLM client and baselines (Phase 3)
+
+Every LLM call goes through `formal_mas.llm.client.LLMClient`, one OpenAI-compatible
+client configured only by `config/models.yaml`:
+
+- **Profiles.** `dev` (default, free: Gemini `gemini-3.8-flash`, falling back to
+  `gemini-3.5-flash-lite`) is only for debugging code. `experiment` (paid: DeepSeek
+  `deepseek-flash` for every role) has no fallback model: after the retries with
+  backoff a problem is marked `provider_error`, which is not a system failure.
+- **Thinking.** On, with `reasoning_effort: low`, for planner, generator and
+  autoformalizer; off for the critic. Baseline A uses the Autoformalizer's settings and
+  Baseline B the Generator's (`same_as`), so the comparisons are fair.
+- **Budget.** At most `b_max` LLM calls per problem (`config/pipeline.yaml → budget`);
+  cache hits and the JSON repair call count, transport retries do not.
+- **Cache.** On disk (`data/llm_cache/`). The key covers the endpoint, the model, the full
+  request and the sample index, so the *N* self-consistency samples are different entries.
+- **JSON.** Outputs are parsed tolerantly (code fences, prose, trailing commas) and
+  validated against the Pydantic contracts. If parsing fails, the client makes one repair call.
+- **Trace.** One `llm_call` event per call in `trace.jsonl`. It records role, requested and
+  returned model, `system_fingerprint`, tokens (cache hit/miss, reasoning), cost at the
+  tariff in force at the call's UTC start (peak/off-peak), latency, timestamp, cache hit
+  and `finish_reason`.
+
+Baselines:
+
+- **C1 (Baseline A)** asks the LLM for a tactic block only. `statement.proof_file` builds
+  the file, `sanitize.py` checks the block (a rejection is a failed attempt, logged with
+  its reason) and the Lean runner decides. There are up to 4 independent samples.
+- **C2 (Baseline B)** asks for a natural-language proof and then a self-assessment by the
+  same model. It *claims* success when its own verdict is "correct". Lean never checks it.
+
 ---
 
 ## 2. Repository structure
@@ -90,15 +121,27 @@ formal-mas/
 ├── README.md
 ├── requirements.txt
 ├── pyproject.toml               # package metadata and pytest settings
+├── .env.example                 # API key variables (copy to .env)
 │
 ├── config/
-│   ├── models.yaml              # the ONLY place where models are named (embeddings today)
-│   └── pipeline.yaml            # hyperparameters (retrieval: method, k, depth, rrf_k, …)
+│   ├── models.yaml              # the ONLY place where models are named (providers, models, profiles)
+│   └── pipeline.yaml            # hyperparameters (retrieval, lean, budget, llm cache, baselines)
 │
 ├── src/formal_mas/
 │   ├── config.py                # loads models.yaml and pipeline.yaml
+│   ├── tracing.py               # trace.jsonl writer and the per-problem budget (b_max)
+│   ├── run_config.py            # runs/<run>/run_config.json (RNF-2)
+│   ├── llm/
+│   │   ├── client.py            # OpenAI-compatible client: budget, cache, retries, JSON, trace
+│   │   ├── specs.py             # resolves and validates a profile of models.yaml
+│   │   └── pricing.py           # usage normalisation and cost (peak / off-peak)
 │   ├── agents/
-│   │   └── contracts.py         # Pydantic I/O contracts (LemmaHit)
+│   │   ├── contracts.py         # Pydantic I/O contracts (LemmaHit, TacticProof, NLSolution, …)
+│   │   └── prompting.py         # loads prompts/*.md (SYSTEM:/USER:, {{placeholders}})
+│   ├── baselines/
+│   │   ├── baseline_a.py        # C1: LLM writes the tactic block, Lean verifies
+│   │   └── baseline_b.py        # C2: natural-language proof + self-assessment (unverified)
+│   ├── prompts/                 # one .md per prompt
 │   ├── lean/
 │   │   ├── runner.py            # compiles Lean (REPL, fallback per file), acceptance (Eq. 2)
 │   │   ├── sanitize.py          # rejects unsafe generated Lean (escapes, metaprogramming, IO…)
@@ -122,17 +165,23 @@ formal-mas/
 │   ├── build_reference_set.py   # reference set Q (dev/test)
 │   ├── kaggle_job.py            # embeds the corpus on a free Kaggle GPU
 │   ├── kaggle_embed.py          # the Kaggle kernel itself (runs on Kaggle)
-│   └── eval_retrieval.py        # Recall@k / MRR of every method
+│   ├── eval_retrieval.py        # Recall@k / MRR of every method
+│   └── run_eval.py              # runs a configuration (C1, C2 today) over a dataset
 │
 ├── lean_project/                # Lean 4 + Mathlib project (pinned versions)
 ├── lean_repl/                   # Lean REPL clone + build (generated, not in git)
 ├── data/
+│   ├── smoke.jsonl              # 5 trivial hand-written problems for smoke runs
 │   ├── retrieval_eval/          # Q (q_dev.jsonl, q_test.jsonl) and evaluation results
-│   └── index/                   # generated corpus and indexes (not in git)
-└── tests/                       # offline unit tests (+ one slow Lean integration test)
+│   ├── index/                   # generated corpus and indexes (not in git)
+│   └── llm_cache/               # LLM response cache (not in git)
+├── runs/                        # one folder per run (not in git)
+├── docs/prompt_log.md           # log of prompt changes and their measured effect
+└── tests/                       # offline unit tests (+ slow Lean integration tests)
 ```
 
-`data/index/`, `runs/`, `lean_project/.lake/`, `lean_repl/` and `.env` are git-ignored.
+`data/index/`, `data/llm_cache/`, `runs/`, `lean_project/.lake/`, `lean_repl/` and `.env`
+are git-ignored.
 
 ---
 
@@ -158,6 +207,9 @@ pip install -e .
 ```
 
 On Windows, set `PYTHONUTF8=1` so the console handles Lean symbols (ℝ, ⊢, ≤).
+
+API keys go in `.env` (copy `.env.example`; never commit it): `GEMINI_API_KEY` for the
+free `dev` profile, `DEEPSEEK_API_KEY` for the paid `experiment` profile.
 
 ### 3.3 Lean 4 + Mathlib
 
@@ -303,10 +355,49 @@ Results are written to `data/retrieval_eval/results_<split>.{json,md,tex}`.
 Model and *k* selection must use the dev split only; the test split is reserved for
 the final numbers.
 
-### 4.4 Configuration
+### 4.4 Running the baselines
 
-- **Models** are defined only in `config/models.yaml`. To change the embedding model,
-  edit `embeddings.selected` (and rebuild its index); never write model names in code.
+```bash
+MODEL_PROFILE=dev python scripts/run_eval.py --config C1 --data data/smoke.jsonl --echo
+MODEL_PROFILE=dev python scripts/run_eval.py --config C2 --data data/smoke.jsonl --limit 3
+```
+
+Each run writes `runs/<UTC time>_<config>_<profile>/`:
+
+- `run_config.json`: exact role specs, the models and fingerprints the provider returned,
+  seed, Lean toolchain and Mathlib revision, `LeanRunner.run_info()` (incl. `degraded`),
+  RAG index metadata, dataset hash, git commit and uncommitted changes. It is written at
+  the start and rewritten at the end.
+- `trace.jsonl`: one event per line, covering LLM calls, retries, attempts, Lean checks and warnings.
+- `results.jsonl`: one line per problem with status, attempts, LLM calls, tokens, cost and
+  `length` finishes.
+
+`experiment` runs are paid and need the team's explicit permission. `run_eval.py` warns
+(without blocking) when a run starts inside DeepSeek's peak-price window (01:00–04:00
+and 06:00–10:00 UTC, Monday–Friday). The client warns when the first response's `model`
+differs from `expected_version` in `models.yaml`.
+
+**Spend caps** (`config/pipeline.yaml` → `spend`): every paid call is appended to
+`data/spend_ledger.jsonl` (outside git) with its date, run, problem, role and computed
+cost. Before each paid request the client compares its worst-case cost (every prompt
+byte as a cache-miss token plus all of `max_tokens` as output, at the peak price) with `spend.total_usd`
+(whole project, sum of the ledger) and `spend.run_usd` (this run). If it could pass
+either cap the request is not sent, the problem is `budget_stop` and the run ends
+cleanly (`run_config.json` status `budget_stop`). `run_eval.py` prints the project's
+spend and what is left at the start and the run's cost at the end; `--run-usd` can only
+lower the per-run cap. Because the check uses the worst case, a run stops a little before
+its cap is actually reached.
+
+### 4.5 Configuration
+
+- **Models** are defined only in `config/models.yaml`: `providers` (endpoint and the
+  environment variable of the key), `models` (id, `expected_version`, JSON mode, how to
+  toggle thinking, prices and peak windows), and `profiles` (role → model and request
+  parameters; `same_as` copies a role). Never write model names in code. To change the
+  embedding model, edit `embeddings.selected` (and rebuild its index).
+- **Budget, spend, cache and baselines** live in `config/pipeline.yaml`: `budget.b_max`,
+  `spend.total_usd`, `spend.run_usd`, `spend.ledger`, `llm.cache`, `llm.cache_dir`,
+  `llm.json_repair`, `baselines.*.attempts`, `run.seed`.
 - **Retrieval hyperparameters** live in `config/pipeline.yaml` → `retrieval`:
   `method` (`rrf` | `bm25` | `dense`), `k`, `depth`, `rrf_k`, `query_instruction`,
   `generic_query`, `index_dir`, `suggestions`.
@@ -314,10 +405,10 @@ the final numbers.
   (`repl` | `file`), `base_imports`, `timeout_s`, `startup_timeout_s`, `restart_every`,
   `restart_memory_mb`, `kill_memory_mb`, `cache_size`.
 
-### 4.5 Tests
+### 4.6 Tests
 
 ```bash
-pytest              # offline unit tests (toy corpus, fake encoder, fake REPL, recorded Lean outputs)
+pytest              # offline unit tests (toy corpus, fake encoder, fake REPL, fake LLM, recorded Lean outputs)
 pytest -m slow      # integration tests with real Lean + Mathlib (~2.5 min warm)
 ```
 
@@ -333,4 +424,8 @@ them with `python scripts/capture_lean_fixtures.py` when the Lean version change
 - Index metadata (`data/index/*/<model>/meta.json`, `data/retrieval_eval/meta.json`)
   records the model, Hugging Face revision, precision, corpus hash and Mathlib commit.
 - The reference set split uses seed 2026, stratified by area.
+- Every run stores `runs/<run>/run_config.json` (see §4.4). DeepSeek offers no versioned
+  model id: `deepseek-flash` is an alias (it has already moved from V4-Flash to
+  V4.1-Flash), and the API echoes the alias as `model`, so the `system_fingerprint` of
+  every response (recorded with `model`) is the only per-call trace of the underlying model.
 - Every decision taken during Phase 1, with its evidence, is logged in `PLAN.md`.
