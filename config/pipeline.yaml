@@ -59,6 +59,45 @@ llm:
   cache_dir: data/llm_cache
   json_repair: true         # one extra LLM call to repair unparsable JSON (counts for b_max)
 
+planner:
+  # Phase 4 (agents/planner.py). The LLM proposes at most n_max subgoals and a closing
+  # tactic block; the code checks each piece (lean/sanitize.py), builds the skeleton
+  # (statement.skeleton) and compiles it with `sorry` allowed. On any failure: the trivial
+  # plan (the whole goal as the only subgoal), with the reason in the trace.
+  n_max: 4
+  retrieve: true            # give the model the Retriever's top-k lemmas (query: the theorem)
+  check_skeleton: true      # compile the skeleton (REPL, ~0.1-0.5 s); false only in tests
+  # Refutation (2026-10-29, team decision): before accepting a plan, try to prove the negation
+  # of each subgoal from the theorem's hypotheses alone with these tactics (one file, no LLM).
+  # A proved negation rejects the plan (`refuted:sg<i>`); first `<name>_consistent : False`:
+  # if the hypotheses are contradictory, the check is skipped. Each lemma gets its own
+  # heartbeat limit (miniF2F headers set maxHeartbeats 0); a wall-clock timeout refutes nothing
+  # (and restarts the REPL, ~31 s). Measured on aime_1991_p1: 1.4-2.8 s per plan. The goal is
+  # `False`, so tactics that ignore hypotheses (positivity, decide) are not listed.
+  refute:
+    enabled: true
+    tactics: [omega, linarith, nlinarith, "norm_num at *", simp_all]
+    heartbeats: 200000
+    timeout_s: 20
+  # When the model's closing block is not accepted, try these tactics as the closing step
+  # (one lemma each, one file, no LLM); the first that is accepted replaces it
+  # (`closing_auto:<tactic>`). Runs after the refutation check: nlinarith closes anything from
+  # false subgoals.
+  closing_auto:
+    enabled: true
+    tactics: [omega, linarith, norm_num, positivity, nlinarith]
+    heartbeats: 200000
+    timeout_s: 20
+
+generator:
+  # Phase 4 (agents/generator.py). N natural-language sketches per subgoal
+  # (self-consistency), each labelled with a strategy of contracts.STRATEGIES; majority vote
+  # over the labels (Eq. 9), ties broken by the order of STRATEGIES. Every sample is one
+  # LLM call for b_max: planner (1) + n_max × samples (4 × 3 = 12) = 13 ≤ 16 before any
+  # JSON repair. Phase 5 adds the Autoformalizer, so this split will be revisited there.
+  samples: 3
+  retrieve: true            # condition each subgoal on its own top-k lemmas (query: the subgoal)
+
 baselines:
   # C1: the LLM writes only the tactic block (statement.proof_file builds the file,
   # sanitize checks it, the runner verifies). Independent samples, no error feedback.

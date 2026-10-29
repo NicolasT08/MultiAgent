@@ -92,6 +92,7 @@ MODELS_CFG = {
     },
     "profiles": {
         "experiment": {"fallbacks_allowed": False, "pinned": True, "roles": {
+            "planner": {"model": "flash", "thinking": True, "reasoning_effort": "low", "max_tokens": 1000},
             "generator": {"model": "flash", "thinking": True, "reasoning_effort": "low", "max_tokens": 1000},
             "autoformalizer": {"model": "flash", "thinking": True, "reasoning_effort": "low", "max_tokens": 1000},
             "critic": {"model": "flash", "thinking": False, "temperature": 0.0, "max_tokens": 400},

@@ -84,8 +84,8 @@ Full tables (BGE-base, BGE-M3, both gold definitions, LaTeX versions) are in
 Every LLM call goes through `formal_mas.llm.client.LLMClient`, one OpenAI-compatible
 client configured only by `config/models.yaml`:
 
-- **Profiles.** `dev` (default, free: Gemini `gemini-3.8-flash`, falling back to
-  `gemini-3.5-flash-lite`) is only for debugging code. `experiment` (paid: DeepSeek
+- **Profiles.** `dev` (default, free: Gemini `gemini-3.5-flash-lite`, falling back to
+  `gemini-3.8-flash`) is only for debugging code. `experiment` (paid: DeepSeek
   `deepseek-flash` for every role) has no fallback model: after the retries with
   backoff a problem is marked `provider_error`, which is not a system failure.
 - **Thinking.** On, with `reasoning_effort: low`, for planner, generator and
@@ -109,6 +109,45 @@ Baselines:
   its reason) and the Lean runner decides. There are up to 4 independent samples.
 - **C2 (Baseline B)** asks for a natural-language proof and then a self-assessment by the
   same model. It *claims* success when its own verdict is "correct". Lean never checks it.
+
+### 1.4 Planner and Generator (Phase 4)
+
+- **Planner** (`agents/planner.py`, `prompts/planner.md`). Input: the formal statement,
+  the informal one, and the Retriever's top-*k* lemmas for the theorem. The LLM returns
+  `PlanProposal` (`contracts.py`): at most `n_max` one-line Lean propositions (subgoals),
+  a closing tactic block and a short rationale. The code checks every subgoal with
+  `sanitize.check_term` and the closing block with `check_tactics`. Then, with Lean and no
+  further LLM calls:
+  1. The skeleton (`statement.skeleton`: `have h<i> : P<i> := by sorry` …, closing `sorry`)
+     must compile, so every subgoal is a well-typed proposition.
+  2. **Refutation** (`planner.refute`): one file with `<name>_consistent : False` and, per
+     subgoal, `<name>_ref<i> (hr : P<i>) : False` (`statement.refutation_file`), using the
+     theorem's hypotheses only and closed by a fixed list of automatic tactics under a
+     heartbeat limit. A proved `_ref<i>` means the subgoal is false wherever the hypotheses
+     hold: the plan is rejected (`refuted:sg<i>`, event `plan_refuted`). If `_consistent` is
+     proved, the hypotheses are contradictory and the check is skipped. A timeout refutes
+     nothing. The check can only reject a plan.
+  3. The closing step alone, as `<name>_close` with the subgoals as hypotheses
+     (`statement.closing_lemma`), must be *accepted* (no hidden `sorry`). If it is not, the
+     tactics of `planner.closing_auto` are tried in one file
+     (`statement.closing_candidates_file`); the first that is accepted replaces the closing
+     (`closing_source: auto:<tactic>`, reason `closing_auto:<tactic>`).
+  4. The skeleton with the final closing must compile.
+
+  A proposal with **no subgoals** is a *direct plan*: its closing block must be an accepted
+  proof of the theorem itself (`source: direct`). If anything fails (bad JSON, too many
+  subgoals, unsafe text, a refuted subgoal, a closing that nothing repairs, budget or
+  provider errors), the Planner uses the **trivial plan**: the whole goal as the only
+  subgoal, closed by `exact h1`. The reason goes to the trace (`plan_fallback`).
+- **Generator** (`agents/generator.py`, `prompts/generator.md`). For each subgoal it
+  queries the Retriever with the subgoal as a lemma statement (theorem binders, earlier
+  subgoals as `h1 … h(i-1)`, then the subgoal). It then draws *N* natural-language sketches
+  (self-consistency), each labelled with one strategy from the fixed list
+  `contracts.STRATEGIES`. The vote (Eq. 9) picks the most frequent label. Ties go to the
+  label listed first in `STRATEGIES`. The representative sketch is the lowest-index
+  sample with the winning label. Every sample is one LLM call for `b_max`.
+- Neither node raises: unsafe Lean, invalid JSON, provider errors, budget exhaustion and
+  spend stops become statuses in the result and events in the trace.
 
 ---
 
@@ -134,10 +173,13 @@ formal-mas/
 │   ├── llm/
 │   │   ├── client.py            # OpenAI-compatible client: budget, cache, retries, JSON, trace
 │   │   ├── specs.py             # resolves and validates a profile of models.yaml
-│   │   └── pricing.py           # usage normalisation and cost (peak / off-peak)
+│   │   ├── pricing.py           # usage normalisation and cost (peak / off-peak)
+│   │   └── spend.py             # spend caps and the ledger of real spend
 │   ├── agents/
-│   │   ├── contracts.py         # Pydantic I/O contracts (LemmaHit, TacticProof, NLSolution, …)
-│   │   └── prompting.py         # loads prompts/*.md (SYSTEM:/USER:, {{placeholders}})
+│   │   ├── contracts.py         # Pydantic I/O contracts (LemmaHit, PlanProposal, SketchProposal, …)
+│   │   ├── prompting.py         # loads prompts/*.md (SYSTEM:/USER:, {{placeholders}})
+│   │   ├── planner.py           # subgoals + closing step; skeleton, refutation, closing checked, else trivial plan
+│   │   └── generator.py         # N sketches per subgoal, strategy vote (Eq. 9)
 │   ├── baselines/
 │   │   ├── baseline_a.py        # C1: LLM writes the tactic block, Lean verifies
 │   │   └── baseline_b.py        # C2: natural-language proof + self-assessment (unverified)
@@ -166,12 +208,13 @@ formal-mas/
 │   ├── kaggle_job.py            # embeds the corpus on a free Kaggle GPU
 │   ├── kaggle_embed.py          # the Kaggle kernel itself (runs on Kaggle)
 │   ├── eval_retrieval.py        # Recall@k / MRR of every method
-│   └── run_eval.py              # runs a configuration (C1, C2 today) over a dataset
+│   └── run_eval.py              # runs a configuration (C1, C2; PG = Phase 4 preview) over a dataset
 │
 ├── lean_project/                # Lean 4 + Mathlib project (pinned versions)
 ├── lean_repl/                   # Lean REPL clone + build (generated, not in git)
 ├── data/
 │   ├── smoke.jsonl              # 5 trivial hand-written problems for smoke runs
+│   ├── dev_preview.jsonl        # 5 medium miniF2F problems for Planner/Generator previews (dev only)
 │   ├── retrieval_eval/          # Q (q_dev.jsonl, q_test.jsonl) and evaluation results
 │   ├── index/                   # generated corpus and indexes (not in git)
 │   └── llm_cache/               # LLM response cache (not in git)
@@ -180,8 +223,8 @@ formal-mas/
 └── tests/                       # offline unit tests (+ slow Lean integration tests)
 ```
 
-`data/index/`, `data/llm_cache/`, `runs/`, `lean_project/.lake/`, `lean_repl/` and `.env`
-are git-ignored.
+`data/index/`, `data/llm_cache/`, `data/spend_ledger.jsonl`, `runs/`, `lean_project/.lake/`, `lean_repl/`
+and `.env` are git-ignored.
 
 ---
 
@@ -355,11 +398,13 @@ Results are written to `data/retrieval_eval/results_<split>.{json,md,tex}`.
 Model and *k* selection must use the dev split only; the test split is reserved for
 the final numbers.
 
-### 4.4 Running the baselines
+### 4.4 Running the baselines and the Phase 4 preview
 
 ```bash
 MODEL_PROFILE=dev python scripts/run_eval.py --config C1 --data data/smoke.jsonl --echo
 MODEL_PROFILE=dev python scripts/run_eval.py --config C2 --data data/smoke.jsonl --limit 3
+# Planner + Generator only (plans and sketches, no proof); not an experimental configuration
+MODEL_PROFILE=dev python scripts/run_eval.py --config PG --data data/dev_preview.jsonl --echo
 ```
 
 Each run writes `runs/<UTC time>_<config>_<profile>/`:
@@ -398,6 +443,9 @@ its cap is actually reached.
 - **Budget, spend, cache and baselines** live in `config/pipeline.yaml`: `budget.b_max`,
   `spend.total_usd`, `spend.run_usd`, `spend.ledger`, `llm.cache`, `llm.cache_dir`,
   `llm.json_repair`, `baselines.*.attempts`, `run.seed`.
+- **Planner and Generator** live in `config/pipeline.yaml` → `planner` (`n_max`, `retrieve`,
+  `check_skeleton`, `refute` and `closing_auto`: `enabled`, `tactics`, `heartbeats`,
+  `timeout_s`) and `generator` (`samples` = *N*, `retrieve`).
 - **Retrieval hyperparameters** live in `config/pipeline.yaml` → `retrieval`:
   `method` (`rrf` | `bm25` | `dense`), `k`, `depth`, `rrf_k`, `query_instruction`,
   `generic_query`, `index_dir`, `suggestions`.

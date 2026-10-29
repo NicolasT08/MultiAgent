@@ -20,8 +20,11 @@ under a statement built by lean/statement.py, and subgoal propositions, pasted a
     metaprogramming `macro`, `syntax`, `elab`, `notation`, `run_cmd`, `run_tac`, `unsafe`,
                     `implemented_by`, `extern`, `axiom`, the `Lean.*` namespace, …
     io              `IO` and friends in any form (generated code must never run programs)
-    sorry           `sorry`, `admit`
-    native          `native_decide`, `decide +native`, `ofReduceBool` (extra axioms)
+    sorry           `sorry`, `admit`, `sorryAx` (the axiom behind `sorry`), `stop` (closes the
+                    rest of the block with `sorry`)
+    search          `exact?`, `apply?`: library search at verification time (slow, and on
+                    success it only prints a suggestion; the proof must name its lemmas)
+    native         `native_decide`, `decide +native`, `ofReduceBool` (extra axioms)
     lean3           Lean 3 syntax (`begin`, `assume`, `cases h with x`, `nat.succ_le_iff`)
 
 This is a first line of defence, not the judge: the runner still requires that Lean
@@ -61,7 +64,8 @@ METAPROGRAMMING = frozenset({
     "addAndCompile", "modifyEnv", "setEnv", "evalTactic", "liftMetaTactic", "debug",
 })
 IO_NAMES = frozenset({"IO", "EIO", "BaseIO", "unsafeIO", "unsafeEIO", "unsafeBaseIO", "System", "FilePath"})
-SORRY = frozenset({"sorry", "admit"})
+SORRY = frozenset({"sorry", "admit", "sorryAx", "stop"})
+SEARCH = frozenset({"exact?", "apply?"})
 NATIVE = frozenset({"native_decide", "native", "ofReduceBool", "ofReduceNat"})
 
 _PAIRS = {"(": ")", "[": "]", "{": "}", "⦃": "⦄", "⟨": "⟩"}
@@ -139,8 +143,10 @@ def _check_tokens(code: str) -> SanitizeResult:
         return _reject("escape", "attribute `@[…]`")
     for ident in _identifiers(code):
         parts = ident.split(".")
-        if parts[0] in SORRY:
+        if parts[0] in SORRY or "sorryAx" in parts:  # also `_root_.sorryAx`
             return _reject("sorry", ident)
+        if ident in SEARCH:
+            return _reject("search", ident)
         if any(p in NATIVE for p in parts):
             return _reject("native", ident)
         if any(p in IO_NAMES for p in parts):

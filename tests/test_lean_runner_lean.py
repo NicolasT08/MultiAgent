@@ -68,3 +68,40 @@ def test_statement_pipeline_end_to_end(runner):
     assert accepted(final) == (True, "accepted") and final.declarations == ["amgm_10"]
     wrong = runner.verify(proof_file(thm, "linarith"), theorem=thm.name)
     assert accepted(wrong) == (False, "error")
+
+
+REFUTE = ["omega", "linarith", "nlinarith", "norm_num at *", "simp_all"]
+AIME = ("theorem aime_1991_p1 (x y : ℕ) (h₀ : 0 < x ∧ 0 < y) (h₁ : x * y + (x + y) = 71)\n"
+        "  (h₂ : x ^ 2 * y + x * y ^ 2 = 880) : x ^ 2 + y ^ 2 = 146 := by sorry")
+
+
+def _proved(runner, thm, code, ranges):
+    from formal_mas.lean.runner import compiles_between
+
+    res = runner.verify(code, None, timeout=60)
+    return {name.removeprefix(thm.name + "_") for name, r in ranges.items() if compiles_between(res, *r)}
+
+
+def test_refutation_rejects_false_subgoals_only(runner):
+    """The plan Flash-Lite proposed for aime_1991_p1 on 2026-10-28 (x*y = 10, x + y = 61) is
+    refuted subgoal by subgoal; the true values (55, 16) are not; contradictory hypotheses
+    prove `_consistent` (the Planner then skips the check)."""
+    from formal_mas.lean.statement import parse_theorem, refutation_file
+
+    thm = parse_theorem("import Mathlib\nimport Aesop\n\nset_option maxHeartbeats 0\n\n" + AIME)
+    assert _proved(runner, thm, *refutation_file(thm, ["x * y = 10", "x + y = 61"], REFUTE, 200000)) == \
+        {"ref1", "ref2"}
+    assert _proved(runner, thm, *refutation_file(thm, ["x * y = 55", "x + y = 16"], REFUTE, 200000)) == set()
+    bad = parse_theorem("theorem c (x y : ℕ) (h₁ : x + y = 3) (h₂ : 10 < x) : x = 5 := by sorry")
+    assert _proved(runner, bad, *refutation_file(bad, ["x = 5"], REFUTE, 200000)) == {"consistent", "ref1"}
+    # a subgoal naming an earlier subgoal's hypothesis is not auto-bound: it fails to elaborate,
+    # so it is never "refuted" (without autoImplicit false, `h1` would become a new variable)
+    assert _proved(runner, thm, *refutation_file(thm, ["x * y = 55", "h1 = h1 → x = 0"], REFUTE, 200000)) == set()
+
+
+def test_closing_candidates(runner):
+    from formal_mas.lean.statement import closing_candidates_file, parse_theorem
+
+    thm = parse_theorem("theorem s (a b : ℝ) (h₀ : a + b = 5) (h₁ : a - b = 1) : a + 2 * b = 7 := by sorry")
+    code, ranges = closing_candidates_file(thm, ["a = 3", "b = 2"], ["omega", "linarith", "nlinarith"], 200000)
+    assert _proved(runner, thm, code, ranges) == {"close_auto2", "close_auto3"}  # omega: not over ℝ

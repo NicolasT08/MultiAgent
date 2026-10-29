@@ -14,26 +14,15 @@ Phase 6 moves C1 onto the shared graph as config/ablations/C1_baseline_a.
 
 from __future__ import annotations
 
-import re
-
 from formal_mas.agents.contracts import TacticProof
 from formal_mas.agents.prompting import render
 from formal_mas.lean.runner import accepted
-from formal_mas.lean.statement import UnsafeLean, parse_theorem, proof_file
+from formal_mas.lean.statement import UnsafeLean, clean_tactics, parse_theorem, proof_file
 from formal_mas.llm.client import LLMClient, LLMOutputError, ProviderError, SpendLimitReached
 from formal_mas.tracing import Budget, BudgetExhausted, Tracer
 
 ROLE = "baseline_a"
-_FENCE_RE = re.compile(r"^\s*```[\w-]*\s*\n(.*?)\n?\s*```\s*$", re.S)
-_BY_RE = re.compile(r"^\s*by\b[ \t]*\n?")
-
-
-def clean_tactics(text: str) -> str:
-    """Remove a surrounding code fence and a leading `by` (the file already has `:= by`)."""
-    m = _FENCE_RE.match(text)
-    if m:
-        text = m.group(1)
-    return _BY_RE.sub("", text, count=1).strip("\n")
+__all__ = ["run_baseline_a", "clean_tactics"]
 
 
 def run_baseline_a(problem: dict, client: LLMClient, runner, budget: Budget, tracer: Tracer,

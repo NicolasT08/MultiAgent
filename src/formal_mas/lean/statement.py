@@ -12,7 +12,18 @@ Files built here (all start with the problem's header, default DEFAULT_HEADER):
                     (or `sorry`): compiled to check that the plan type-checks
     subgoal_lemma   theorem <name>_sg<i> <binders> (h1 : P1) … (h(i-1) : P(i-1)) : Pᵢ := by
                     <block> — the block, unchanged, is later pasted into the skeleton
+                    (`subgoal_statement` is its declaration without the proof)
+    closing_lemma   theorem <name>_close <binders> (h1 : P1) … (hn : Pn) : <goal> := by
+                    <closing> — the Planner requires it to be *accepted* (no sorry)
     assemble        the skeleton with every block pasted and the closing tactic
+    refutation_file <name>_consistent <binders> : False, and <name>_ref<i> <binders>
+                    (hr : Pᵢ) : False for every subgoal, each closed only by a fixed list of
+                    automatic tactics: a proved `_ref<i>` means Pᵢ is false under the theorem's
+                    hypotheses (the Planner rejects the plan)
+    closing_candidates_file  <name>_close_auto<j>: the closing lemma closed by the j-th
+                    tactic of a fixed list (the Planner's fallback when the model's closing fails)
+The last two hold several lemmas, each under `set_option maxHeartbeats N in`, and return the
+line range of every lemma (`compiles_between` in lean/runner.py reads one lemma's result).
 """
 
 from __future__ import annotations
@@ -32,6 +43,8 @@ DEFAULT_HEADER = (
 _OPEN, _CLOSE = "([{⦃⟨", ")]}⦄⟩"
 _NAME_RE = re.compile(r"[^\W\d][\w'.!?]*")
 _DECL_RE = re.compile(r"(?<![\w.'])(theorem|lemma)\s+")
+_FENCE_RE = re.compile(r"^\s*```[\w-]*\s*\n(.*?)\n?\s*```\s*$", re.S)
+_BY_RE = re.compile(r"^\s*by\b[ \t]*\n?")
 
 
 class UnsafeLean(ValueError):
@@ -82,6 +95,14 @@ class Theorem:
             if not taken.intersection(names):
                 return names
         raise ValueError(f"{self.name}: binders already use h/hsg/hsg_ hypothesis names")
+
+    def fresh_name(self, base: str) -> str:
+        """`base`, `base_`, `base__`, … whichever no binder uses."""
+        taken = set(self.binder_names)
+        name = base
+        while name in taken:
+            name += "_"
+        return name
 
 
 def _read_group(text: str, i: int) -> int:
@@ -160,6 +181,15 @@ def indent(block: str, spaces: int) -> str:
     return "\n".join((" " * spaces + line) if line.strip() else "" for line in lines)
 
 
+def clean_tactics(text: str) -> str:
+    """Remove a surrounding code fence and a leading `by` from a model's tactic block (the
+    files already have `:= by`). Nothing else is changed: sanitize checks the result."""
+    m = _FENCE_RE.match(text)
+    if m:
+        text = m.group(1)
+    return _BY_RE.sub("", text, count=1).strip("\n")
+
+
 def _checked_tactics(slot: str, block: str) -> str:
     res = check_tactics(block)
     if not res.ok:
@@ -190,17 +220,95 @@ def skeleton(thm: Theorem, subgoals: list[str], closing: str | None = None) -> s
     return f"{thm.header}\n{thm.declaration()} := by\n" + "\n".join(body) + "\n"
 
 
-def subgoal_lemma(thm: Theorem, subgoals: list[str], i: int, block: str) -> tuple[str, str]:
-    """Subgoal i (1-based) as a standalone lemma → (lemma name, file)."""
+def subgoal_statement(thm: Theorem, subgoals: list[str], i: int) -> tuple[str, str]:
+    """Subgoal i (1-based) as a lemma declaration without proof → (lemma name, declaration):
+    `theorem <name>_sg<i> <binders> (h1 : P1) … (h(i-1) : P(i-1)) : Pᵢ`. Raises UnsafeLean."""
     subgoals = _checked_terms(subgoals)
     if not 1 <= i <= len(subgoals):
         raise IndexError(f"subgoal {i} of {len(subgoals)}")
-    block = _checked_tactics(f"subgoal {i} proof", block)
     names = thm.hypothesis_names(len(subgoals))
     extra = tuple(f"({h} : {p})" for h, p in zip(names[:i - 1], subgoals[:i - 1]))
     name = f"{thm.name}_sg{i}"
-    decl = thm.declaration(name=name, extra=extra, goal=subgoals[i - 1])
+    return name, thm.declaration(name=name, extra=extra, goal=subgoals[i - 1])
+
+
+def subgoal_lemma(thm: Theorem, subgoals: list[str], i: int, block: str) -> tuple[str, str]:
+    """Subgoal i (1-based) as a standalone lemma → (lemma name, file)."""
+    name, decl = subgoal_statement(thm, subgoals, i)
+    block = _checked_tactics(f"subgoal {i} proof", block)
     return name, f"{thm.header}\n{decl} := by\n{indent(block, 2)}\n"
+
+
+def closing_lemma(thm: Theorem, subgoals: list[str], closing: str) -> tuple[str, str]:
+    """The closing step as a standalone lemma → (lemma name, file):
+    `theorem <name>_close <binders> (h1 : P1) … (hn : Pn) : <goal> := by <closing>`.
+    Unlike the skeleton (whose `have`s are `sorry`), it must be *accepted*, so a closing
+    step that hides a `sorry` cannot pass. Raises UnsafeLean."""
+    subgoals = _checked_terms(subgoals)
+    closing = _checked_tactics("closing", closing)
+    names = thm.hypothesis_names(len(subgoals))
+    extra = tuple(f"({h} : {p})" for h, p in zip(names, subgoals))
+    name = f"{thm.name}_close"
+    return name, f"{thm.header}\n{thm.declaration(name=name, extra=extra)} := by\n{indent(closing, 2)}\n"
+
+
+def first_of(tactics: list[str]) -> str:
+    """`first | (t1; done) | (t2; done) …` over one-line tactics (`done`: an alternative that
+    leaves goals open fails, so the next one is tried). Raises ValueError / UnsafeLean."""
+    if not tactics:
+        raise ValueError("empty tactic list")
+    alts = []
+    for t in tactics:
+        if "\n" in t.strip():
+            raise ValueError(f"automatic tactics are one line each: {t!r}")
+        alts.append(f"  | ({_checked_tactics('automatic tactic', t.strip())}; done)")
+    return "first\n" + "\n".join(alts)
+
+
+def _lemma_set(thm: Theorem, lemmas: list[tuple[str, tuple[str, ...], str, str]],
+               heartbeats: int) -> tuple[str, dict[str, tuple[int, int]]]:
+    """Several lemmas (name, extra binders, goal, tactic block) in one file, each under
+    `set_option maxHeartbeats <heartbeats> in` and `set_option autoImplicit false in` →
+    (file, {name: (first line, last line)}). Without the latter, a subgoal that mentions an
+    earlier subgoal's hypothesis (`h1`, not in scope here) would auto-bind it as a new
+    variable, and the lemma would be about another proposition."""
+    code = f"{thm.header}\n"
+    ranges = {}
+    for name, extra, goal, block in lemmas:
+        first = code.count("\n") + 1
+        code += (f"set_option maxHeartbeats {int(heartbeats)} in\nset_option autoImplicit false in\n"
+                 f"{thm.declaration(name=name, extra=extra, goal=goal)} := by\n{indent(block, 2)}\n")
+        ranges[name] = (first, code.count("\n"))
+        code += "\n"
+    return code, ranges
+
+
+def refutation_file(thm: Theorem, subgoals: list[str], tactics: list[str],
+                    heartbeats: int) -> tuple[str, dict[str, tuple[int, int]]]:
+    """`<name>_consistent : False` from the theorem's hypotheses alone, then for each subgoal
+    `<name>_ref<i> (hr : Pᵢ) : False` — with the theorem's hypotheses only, never the earlier
+    subgoals (a false earlier subgoal would refute anything). Raises UnsafeLean / ValueError."""
+    subgoals = _checked_terms(subgoals)
+    block = first_of(tactics)
+    hr = thm.fresh_name("hr")
+    lemmas = [(f"{thm.name}_consistent", (), "False", block)]
+    lemmas += [(f"{thm.name}_ref{i}", (f"({hr} : {p})",), "False", block) for i, p in enumerate(subgoals, start=1)]
+    return _lemma_set(thm, lemmas, heartbeats)
+
+
+def closing_candidates_file(thm: Theorem, subgoals: list[str], tactics: list[str],
+                            heartbeats: int) -> tuple[str, dict[str, tuple[int, int]]]:
+    """`<name>_close_auto<j>`: the closing lemma (subgoals as hypotheses) closed by tactic j
+    alone. Raises UnsafeLean / ValueError."""
+    subgoals = _checked_terms(subgoals)
+    names = thm.hypothesis_names(len(subgoals))
+    extra = tuple(f"({h} : {p})" for h, p in zip(names, subgoals))
+    lemmas = []
+    for j, t in enumerate(tactics, start=1):
+        if "\n" in t.strip():
+            raise ValueError(f"automatic tactics are one line each: {t!r}")
+        lemmas.append((f"{thm.name}_close_auto{j}", extra, thm.goal, _checked_tactics("automatic tactic", t.strip())))
+    return _lemma_set(thm, lemmas, heartbeats)
 
 
 def assemble(thm: Theorem, subgoals: list[str], blocks: list[str], closing: str) -> str:

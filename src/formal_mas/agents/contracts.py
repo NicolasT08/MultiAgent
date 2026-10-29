@@ -1,5 +1,5 @@
 """I/O contracts between agents (RNF-4). Each model exports a JSON Schema via
-`Model.model_json_schema()`; later phases add the Planner, Generator, ... contracts here."""
+`Model.model_json_schema()`; later phases add the Autoformalizer and Critic contracts here."""
 
 from __future__ import annotations
 
@@ -49,9 +49,84 @@ class SelfAssessment(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Planner (Phase 4). The LLM proposes `PlanProposal`; the code checks every piece with
+# lean/sanitize.py, builds the skeleton with statement.skeleton and compiles it (sorry
+# allowed). The node's output is `Plan` (source "llm", "direct", or "trivial" with the reason).
+
+
+class PlanProposal(BaseModel):
+    """LLM output of the Planner: subgoal propositions and the closing tactic block."""
+
+    subgoals: list[str] = Field(description="Lean 4 propositions over the theorem's variables, one line each, "
+                                            "proved in order; subgoal i becomes hypothesis h<i>")
+    closing: str = Field(description="Tactic block that proves the theorem's goal from the subgoal hypotheses")
+    rationale: str = Field(default="", description="Why these subgoals, in one or two sentences")
+
+
+class Plan(BaseModel):
+    """Planner node output. The trivial plan is the whole goal as the only subgoal; a direct
+    plan has no subgoals and its closing block alone is an accepted proof of the theorem."""
+
+    subgoals: list[str]
+    closing: str
+    hypotheses: list[str] = Field(description="Names the subgoals get in the skeleton (h1, h2, …)")
+    rationale: str = ""
+    source: Literal["llm", "trivial", "direct"]
+    closing_source: str = Field(default="llm", description="`llm`, or `auto:<tactic>` when the model's closing "
+                                                           "failed and a tactic of planner.closing_auto closed the goal")
+    reason: str | None = Field(default=None, description="Why the trivial plan was used (e.g. `refuted:sg2`), or "
+                                                         "`closing_auto:<tactic>` for a repaired closing")
+    skeleton_compiles: bool | None = Field(default=None, description="Skeleton compiles (sorry allowed) and the "
+                                              "closing lemma is accepted (direct plan: the proof is accepted); "
+                                              "None if not compiled")
+
+
+# ---------------------------------------------------------------------------
+# Generator (Phase 4): N natural-language sketches per subgoal, each labelled with one
+# strategy of the fixed list STRATEGIES; the vote (Eq. 9) is over these labels.
+
+STRATEGIES = ("induction", "case_analysis", "algebraic_manipulation", "classical_inequality",
+              "modular_arithmetic", "contradiction", "direct_computation", "other")
+Strategy = Literal["induction", "case_analysis", "algebraic_manipulation", "classical_inequality",
+                   "modular_arithmetic", "contradiction", "direct_computation", "other"]
+
+
+class SketchProposal(BaseModel):
+    """LLM output of the Generator: one proof sketch of one subgoal."""
+
+    strategy: Strategy = Field(description="Main strategy, one label of the fixed list")
+    sketch: str = Field(description="Numbered natural-language proof steps of the subgoal")
+    lemmas: list[str] = Field(default_factory=list, description="Names of the listed Mathlib lemmas the sketch uses")
+
+    @field_validator("strategy", mode="before")
+    @classmethod
+    def _normalise(cls, v):
+        return "_".join(v.strip().lower().replace("-", " ").split()) if isinstance(v, str) else v
+
+
+class Sketch(SketchProposal):
+    sample: int = Field(description="Self-consistency sample index (0-based)")
+
+
+class SubgoalSketches(BaseModel):
+    """Generator output for one subgoal: the samples, the vote and the chosen sketch."""
+
+    index: int = Field(description="1-based subgoal index")
+    subgoal: str
+    lemmas: list[str] = Field(default_factory=list, description="Retrieved lemma names given to the model")
+    samples: list[Sketch] = Field(default_factory=list)
+    failures: list[dict] = Field(default_factory=list, description="Samples without a valid sketch, with the reason")
+    votes: dict[str, int] = Field(default_factory=dict)
+    strategy: Strategy | None = Field(default=None, description="Winning strategy (Eq. 9)")
+    representative: Sketch | None = Field(default=None, description="Lowest-index sample of the winning strategy")
+    status: Literal["ok", "no_sketch", "budget_exhausted", "budget_stop", "provider_error", "error"] = "ok"
+
+
+# ---------------------------------------------------------------------------
 # JSON Schemas (RNF-4): docs/schemas/<Model>.json, kept in sync by tests/test_baselines.py.
 
-SCHEMA_MODELS = (LemmaHit, TacticProof, NLSolution, SelfAssessment)
+SCHEMA_MODELS = (LemmaHit, TacticProof, NLSolution, SelfAssessment, PlanProposal, Plan, SketchProposal, Sketch,
+                 SubgoalSketches)
 
 
 def schemas() -> dict[str, dict]:

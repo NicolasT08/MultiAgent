@@ -238,6 +238,20 @@ def compiles(result: LeanResult) -> bool:
     return result.status == "finished" and not result.errors
 
 
+def compiles_between(result: LeanResult, first: int, last: int) -> bool:
+    """One lemma of a multi-lemma file (lines first..last) finished without errors and
+    without `sorry`. A message outside every line (line 0, e.g. an abort) counts against
+    every lemma. Only for files whose proofs the code wrote from a fixed tactic list
+    (statement.refutation_file, closing_candidates_file): it reads no axioms."""
+    if result.status != "finished":
+        return False
+    for m in result.messages:
+        inside = first <= m.line <= last or m.line == 0
+        if inside and (m.severity == "error" or (m.severity == "warning" and SORRY_WARNING in m.text)):
+            return False
+    return not any(s.get("line") is not None and first <= s["line"] <= last for s in result.sorries)
+
+
 def accepted(result: LeanResult) -> tuple[bool, str]:
     """Acceptance predicate (Eq. 2): Lean finished, no errors, no `sorry`, the axioms of
     the theorem ⊆ {propext, Classical.choice, Quot.sound}, and the code declared nothing but
