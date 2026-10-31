@@ -90,17 +90,18 @@ def _sketch_subgoal(problem: dict, thm: Theorem, plan: Plan, i: int, client: LLM
 
 
 def run_generator(problem: dict, plan: Plan | dict | None, client: LLMClient, retriever, budget: Budget,
-                  tracer: Tracer, *, samples: int = 3, retrieve: bool = True) -> dict:
+                  tracer: Tracer, *, samples: int = 3, retrieve: bool = True, indices=None) -> dict:
+    """`indices`: only these subgoals (1-based; e.g. those the pre-pass did not close)."""
     out = {"status": "error", "subgoals": [], "detail": None}
     try:
-        _run(problem, plan, client, retriever, budget, tracer, samples, retrieve, out)
+        _run(problem, plan, client, retriever, budget, tracer, samples, retrieve, indices, out)
     except Exception as exc:  # noqa: BLE001 — a node never raises to the caller
         tracer.event("node_error", level="error", node=ROLE, error=repr(exc)[:1000])
         out.update(status="error", detail=repr(exc)[:1000])
     return out
 
 
-def _run(problem, plan, client, retriever, budget, tracer, samples, retrieve, out) -> None:
+def _run(problem, plan, client, retriever, budget, tracer, samples, retrieve, indices, out) -> None:
     try:
         thm = parse_theorem(problem["statement"])
         plan = plan if isinstance(plan, Plan) else Plan.model_validate(plan)
@@ -109,6 +110,8 @@ def _run(problem, plan, client, retriever, budget, tracer, samples, retrieve, ou
         out.update(status="invalid_statement", detail=str(exc)[:500])
         return
     for i in range(1, len(plan.subgoals) + 1):
+        if indices is not None and i not in indices:
+            continue
         try:
             res = _sketch_subgoal(problem, thm, plan, i, client, retriever, budget, tracer, samples, retrieve)
         except (UnsafeLean, ValueError, IndexError) as exc:  # a plan that skipped the Planner's checks

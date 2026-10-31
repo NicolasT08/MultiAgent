@@ -27,7 +27,10 @@ under a statement built by lean/statement.py, and subgoal propositions, pasted a
     native         `native_decide`, `decide +native`, `ofReduceBool` (extra axioms)
     lean3           Lean 3 syntax (`begin`, `assume`, `cases h with x`, `nat.succ_le_iff`)
 
-This is a first line of defence, not the judge: the runner still requires that Lean
+This is the first, offline layer. The second (lean/syntax_check.py, option C of 2026-10-29)
+parses the text that passes with Lean's own parser in the REPL and checks every syntax
+node kind against a whitelist; identifiers are not node kinds, so this blacklist stays.
+Neither layer is the judge: the runner still requires that Lean
 accepts the proof, that `#print axioms` is standard and that the only new declarations
 are the theorem and its auxiliaries (lean/runner.py). The scanner errs on the side of
 rejecting; the Critic sees the reason and asks for a new attempt.
@@ -175,12 +178,14 @@ def _prepare(text: str) -> tuple[str | None, SanitizeResult]:
         return None, _reject("empty", "nothing to compile")
     if "\t" in text:
         return None, _reject("tab", "tab character")
+    # Checked on the whole text, comments included: lean/syntax_check.py embeds generated text in
+    # a raw string literal, and a `"` (even inside a comment) could close it.
+    for ch, what in (('"', "string literal"), ("«", "quoted name «…»"), ("»", "quoted name «…»")):
+        if ch in text:
+            return None, _reject("string", what)
     code = strip_comments(text)
     if code is None:
         return None, _reject("comment", "unterminated block comment `/-`")
-    for ch, what in (('"', "string literal"), ("«", "quoted name «…»"), ("»", "quoted name «…»")):
-        if ch in code:
-            return None, _reject("string", what)
     return code, OK
 
 
@@ -206,6 +211,8 @@ def check_term(term: str) -> SanitizeResult:
         return res
     if "\n" in term.strip():
         return _reject("escape", "a proposition must fit on one line")
+    if "--" in term or "/-" in term:  # pasted as `have h : P := by`, a comment would swallow `:= by`
+        return _reject("comment", "comments are not allowed in a proposition")
     if ":=" in code:
         return _reject("escape", "`:=` in a proposition")
     stack = []

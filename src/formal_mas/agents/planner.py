@@ -161,13 +161,16 @@ def _check_llm_plan(thm: Theorem, plan: Plan, runner, tracer: Tracer, refute: di
 
 def run_planner(problem: dict, client: LLMClient, runner, retriever, budget: Budget, tracer: Tracer, *,
                 n_max: int = 4, retrieve: bool = True, check_skeleton: bool = True,
-                refute: dict | None = None, closing_auto: dict | None = None) -> dict:
+                refute: dict | None = None, closing_auto: dict | None = None, syntax=None) -> dict:
     """`refute` / `closing_auto`: pipeline.yaml → planner.refute / planner.closing_auto
-    ({enabled, tactics, heartbeats, timeout_s}); None turns the step off."""
+    ({enabled, tactics, heartbeats, timeout_s}); None turns the step off. `syntax`: a
+    lean.syntax_check.SyntaxChecker (Lean's parser + node whitelist) for the model's subgoals
+    and closing block, before anything is compiled; None skips that layer (sanitize.py
+    always runs)."""
     out = {"status": "error", "plan": None, "lemmas": [], "detail": None}
     try:
         _run(problem, client, runner, retriever, budget, tracer, n_max, retrieve, check_skeleton,
-             refute, closing_auto, out)
+             refute, closing_auto, syntax, out)
     except Exception as exc:  # noqa: BLE001 — a node never raises to the caller
         tracer.event("node_error", level="error", node=ROLE, error=repr(exc)[:1000])
         out.update(status="error", detail=repr(exc)[:1000])
@@ -182,7 +185,7 @@ def run_planner(problem: dict, client: LLMClient, runner, retriever, budget: Bud
 
 
 def _run(problem, client, runner, retriever, budget, tracer, n_max, retrieve, check, refute, closing_auto,
-         out) -> None:
+         syntax, out) -> None:
     try:
         thm = parse_theorem(problem["statement"])
     except (ValueError, KeyError) as exc:
@@ -220,6 +223,12 @@ def _run(problem, client, runner, retriever, budget, tracer, n_max, retrieve, ch
 
     subgoals = [" ".join(s.split()) for s in proposal.subgoals]
     closing = clean_tactics(proposal.closing)
+    if syntax is not None and len(subgoals) <= n_max:
+        checked = syntax.check(thm.header, tactics=[closing] if closing.strip() else [], terms=subgoals)
+        if bad := next((r for r in checked if not r.ok), None):
+            tracer.event("plan_syntax_rejected", level="warning", node=ROLE, reason=bad.reason, detail=bad.detail)
+            prefix = "direct_closing_failed: " if not subgoals else ""
+            return fallback(f"{prefix}sanitize:{bad.reason}: {bad.detail}")
     if not subgoals:
         return _direct(thm, closing, proposal.rationale, runner, tracer, check, fallback, out)
     if len(subgoals) > n_max:

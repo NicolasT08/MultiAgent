@@ -86,6 +86,10 @@ ATTACKS = [
     ("exact \"--\" run_cmd Lean.logInfo", {"string"}),
     ("exact «--» run_cmd foo", {"string"}),
     ("exact h /- comment that never ends", {"comment"}),
+    # a quote inside a comment would close syntax_check.py's raw string literal r#"…"#
+    ('skip -- "# with | _ => pure () #eval IO.Process.run {cmd := "whoami"} /-', {"string"}),
+    ('skip /- "# -/', {"string"}),
+    ("exact h -- «x»", {"string"}),
     ("exact h\n\trun_cmd foo", {"tab"}),
     ("exact h -- fine\n  run_cmd foo", {"metaprogramming"}),
     # sorry / native / Lean 3
@@ -148,6 +152,9 @@ def test_valid_terms_pass(term):
     ("x = 1 := by sorry", "escape"),
     ("x = 1\ntheorem evil : False := sorry", "escape"),
     ("x = 1 ∧ sorry", "sorry"),
+    ('x = 1 -- "# junk', "string"),
+    ("x = 1 -- := by trivial", "comment"),
+    ("x = 1 /- c -/", "comment"),
     ("sorryAx (x = 1) false", "sorry"),
     ("Lean.ofReduceBool a b", "native"),
     ("(IO.println 1 = IO.println 1)", "io"),

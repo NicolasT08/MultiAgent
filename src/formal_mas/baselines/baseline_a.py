@@ -3,8 +3,9 @@
 Per attempt (independent samples, no error feedback; pipeline.yaml → baselines.baseline_a):
     1. the `baseline_a` role (same parameters as the Autoformalizer) returns {"tactics": …};
     2. statement.proof_file builds the file around it (the model never writes the theorem)
-       and lean/sanitize.py checks the block: a rejection is a failed attempt, logged with
-       its reason (`sanitize:<reason>`);
+       and lean/sanitize.py checks the block, then (if given) lean/syntax_check.py parses it
+       with Lean's parser against the node whitelist: a rejection is a failed attempt, logged
+       with its reason (`sanitize:<reason>`);
     3. LeanRunner.verify + runner.accepted (Eq. 2).
 Stops at the first accepted proof, when the attempts or the budget run out, or on a
 provider error. Never raises (CLAUDE.md §7): every failure becomes a result status.
@@ -26,19 +27,20 @@ __all__ = ["run_baseline_a", "clean_tactics"]
 
 
 def run_baseline_a(problem: dict, client: LLMClient, runner, budget: Budget, tracer: Tracer,
-                   attempts: int = 4) -> dict:
+                   attempts: int = 4, syntax=None) -> dict:
     """→ {status, solved, attempts: [...], proof}. status ∈ solved | failed | provider_error |
     budget_exhausted | budget_stop (spend cap) | invalid_statement | error."""
     out = {"status": "failed", "solved": False, "attempts": [], "proof": None}
     try:
-        _run(problem, client, runner, budget, tracer, attempts, out)
+        _run(problem, client, runner, budget, tracer, attempts, syntax, out)
     except Exception as exc:  # noqa: BLE001 — a node never raises to the caller
         tracer.event("node_error", level="error", node=ROLE, error=repr(exc)[:1000])
         out.update(status="error", solved=False, detail=repr(exc)[:1000])
     return out
 
 
-def _run(problem: dict, client: LLMClient, runner, budget: Budget, tracer: Tracer, attempts: int, out: dict) -> None:
+def _run(problem: dict, client: LLMClient, runner, budget: Budget, tracer: Tracer, attempts: int, syntax,
+         out: dict) -> None:
     try:
         thm = parse_theorem(problem["statement"])
     except (ValueError, KeyError) as exc:
@@ -78,6 +80,10 @@ def _run(problem: dict, client: LLMClient, runner, budget: Budget, tracer: Trace
             continue
         except ValueError as exc:
             record.update(reason="build_failed", detail=str(exc)[:500])
+            tracer.event("attempt_failed", node=ROLE, **record)
+            continue
+        if syntax is not None and not (res := syntax.check(thm.header, tactics=[tactics])[0]).ok:
+            record.update(reason=f"sanitize:{res.reason}", detail=res.detail)
             tracer.event("attempt_failed", node=ROLE, **record)
             continue
         result = runner.verify(code, thm.name)

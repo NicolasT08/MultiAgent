@@ -34,6 +34,11 @@ lean:
   kill_memory_mb: 12000     # kill (status memory_limit) when a command exceeds this; also `lean -M`
   memory_poll_s: 0.5
   cache_size: 4096          # identical verifications answered from memory (0 = off)
+  # Second layer of the sanitizer (option C, 2026-10-29; lean/syntax_check.py): generated text
+  # that passes lean/sanitize.py is parsed by Lean's parser in the REPL and every syntax node
+  # kind must be on the whitelist. One REPL command per check (~0.05-0.5 s).
+  syntax_check: true
+  syntax_timeout_s: 30
   # The file back-end's wall-clock limit is timeout_s + the import time it measures once
   # (not startup_timeout_s); runs that use it are marked degraded (runner.run_info()).
 
@@ -97,6 +102,24 @@ generator:
   # JSON repair. Phase 5 adds the Autoformalizer, so this split will be revisited there.
   samples: 3
   retrieve: true            # condition each subgoal on its own top-k lemmas (query: the subgoal)
+
+autoformalizer:
+  # Phase 5 (agents/autoformalizer.py). One call per subgoal not closed by the pre-pass:
+  # subgoal lemma + winning sketch + lemmas → tactic block (prompt by models.yaml →
+  # prompt_style: chat | prover). b_max per problem: planner 1 + n × (samples + 1)
+  # = 1 + 4 × 4 = 17 > 16 for a 4-subgoal plan with no subgoal closed by the pre-pass
+  # (the call that would pass b_max is refused: budget_exhausted).
+  retrieve: true            # the subgoal lemma's own top-k lemmas (same query as the Generator)
+
+prepass:
+  # Phase 5 (agents/prepass.py): before any LLM call, every tactic alone on the theorem, and
+  # after the plan on every subgoal lemma; one compilation each time (one lemma per target and
+  # tactic, heartbeat limit each), the first that compiles is confirmed with `accepted`.
+  # `enabled: false` for the ablation. A wall-clock timeout finds nothing (REPL restart ~31 s).
+  enabled: true
+  tactics: [rfl, norm_num, simp, omega, linarith, positivity, nlinarith, decide]
+  heartbeats: 200000
+  timeout_s: 60
 
 baselines:
   # C1: the LLM writes only the tactic block (statement.proof_file builds the file,

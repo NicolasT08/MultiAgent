@@ -8,6 +8,12 @@ Phase 3 provides C1 (baseline A) and C2 (baseline B); C3-C5 arrive with the grap
 only (plans and sketches, no proof), one shared budget per problem:
 
     MODEL_PROFILE=dev python scripts/run_eval.py --config PG --data data/dev_preview.jsonl --echo
+
+`--config LIN` is the Phase 5 pipeline, also a preview (C3-C5 arrive with the graph):
+pre-pass → plan → pre-pass → generate → formalize → verify → assemble, no Critic, one attempt
+per subgoal (orchestrator/linear.py); `solved` comes only from the acceptance predicate.
+
+    MODEL_PROFILE=dev python scripts/run_eval.py --config LIN --data data/smoke.jsonl --echo
 Outputs: run_config.json (RNF-2, rewritten at the end), trace.jsonl (RNF-5), results.jsonl
 (one line per problem). The profile comes from MODEL_PROFILE (models.yaml → default_profile).
 Paid profiles need the team's explicit permission (CLAUDE.md §2).
@@ -39,11 +45,13 @@ from formal_mas.llm.client import LLMClient  # noqa: E402
 from formal_mas.llm.pricing import in_peak  # noqa: E402
 from formal_mas.llm.spend import SpendGuard  # noqa: E402
 from formal_mas.llm.specs import profile_name  # noqa: E402
+from formal_mas.lean.syntax_check import SyntaxChecker  # noqa: E402
+from formal_mas.orchestrator.linear import run_linear  # noqa: E402
 from formal_mas.retrieval.retriever import Retriever  # noqa: E402
 from formal_mas.run_config import build_run_config, write_run_config  # noqa: E402
 from formal_mas.tracing import Budget, Tracer, iso, utc_now  # noqa: E402
 
-CONFIGS = {"C1": "baseline_a", "C2": "baseline_b", "PG": "planner_generator"}
+CONFIGS = {"C1": "baseline_a", "C2": "baseline_b", "PG": "planner_generator", "LIN": "linear"}
 LOG = logging.getLogger("formal_mas.run_eval")
 
 
@@ -68,12 +76,12 @@ def summarize(rows: list[dict]) -> dict:
 
 
 def run_planner_generator(p: dict, client, runner, retriever, budget: Budget, tracer: Tracer,
-                          pipeline_cfg: dict) -> dict:
+                          pipeline_cfg: dict, syntax=None) -> dict:
     """Phase 4 preview: plan, then sketch every subgoal (status `budget_stop` if either stopped)."""
     pc, gc = pipeline_cfg.get("planner") or {}, pipeline_cfg.get("generator") or {}
     plan = run_planner(p, client, runner, retriever, budget, tracer, n_max=int(pc.get("n_max", 4)),
                        retrieve=bool(pc.get("retrieve", True)), check_skeleton=bool(pc.get("check_skeleton", True)),
-                       refute=pc.get("refute"), closing_auto=pc.get("closing_auto"))
+                       refute=pc.get("refute"), closing_auto=pc.get("closing_auto"), syntax=syntax)
     gen = {"status": "not_run", "subgoals": [], "detail": None}
     if plan["plan"] is not None and plan["status"] != "budget_stop":
         gen = run_generator(p, plan["plan"], client, retriever, budget, tracer, samples=int(gc.get("samples", 3)),
@@ -106,12 +114,16 @@ def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipel
     ap.add_argument("--echo", action="store_true", help="print one line per problem")
     ap.add_argument("--run-usd", type=float, default=None,
                     help="lower the per-run spend cap for this run (never above pipeline.yaml → spend.run_usd)")
+    ap.add_argument("--no-prepass", action="store_true",
+                    help="LIN: turn the automation pre-pass off (prepass.enabled: false, recorded in run_config.json)")
     args = ap.parse_args(argv)
 
     if not args.data.exists():
         ap.error(f"{args.data} does not exist (data/eval.jsonl arrives in Phase 7; try --data data/smoke.jsonl)")
     models_cfg = models_cfg if models_cfg is not None else load_models()
     pipeline_cfg = pipeline_cfg if pipeline_cfg is not None else load_pipeline()
+    if args.no_prepass:
+        pipeline_cfg = {**pipeline_cfg, "prepass": {**(pipeline_cfg.get("prepass") or {}), "enabled": False}}
     profile = profile_name(models_cfg)
     split = None if args.split == "all" else args.split
     problems = load_problems(args.data, split, args.limit)
@@ -146,8 +158,11 @@ def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipel
         tracer.event("run_peak_warning", level="warning", models=peak, started=iso(started))
         LOG.warning("starting inside a peak-price window for %s (models.yaml → pricing.peak_windows_utc); "
                     "off-peak is cheaper", peak)
-    runner = runner_factory() if role in ("baseline_a", "planner_generator") else None
-    retriever = retriever_factory() if role == "planner_generator" else None
+    runner = runner_factory() if role in ("baseline_a", "planner_generator", "linear") else None
+    retriever = retriever_factory() if role in ("planner_generator", "linear") else None
+    lean_cfg = pipeline_cfg.get("lean") or {}
+    syntax = (SyntaxChecker(runner, float(lean_cfg.get("syntax_timeout_s", 30)))
+              if runner is not None and lean_cfg.get("syntax_check", False) else None)
 
     def config(**extra) -> dict:
         return build_run_config(run_id=run_id, config_name=args.config, seed=seed, dataset=args.data, split=split,
@@ -171,9 +186,12 @@ def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipel
                     t0 = time.perf_counter()
                     tracer.event("problem_start", config=args.config)
                     if role == "baseline_a":
-                        res = run_baseline_a(p, client, runner, budget, tracer, attempts=attempts)
+                        res = run_baseline_a(p, client, runner, budget, tracer, attempts=attempts, syntax=syntax)
                     elif role == "planner_generator":
-                        res = run_planner_generator(p, client, runner, retriever, budget, tracer, pipeline_cfg)
+                        res = run_planner_generator(p, client, runner, retriever, budget, tracer, pipeline_cfg,
+                                                    syntax=syntax)
+                    elif role == "linear":
+                        res = run_linear(p, client, runner, retriever, budget, tracer, pipeline_cfg, syntax=syntax)
                     else:
                         res = run_baseline_b(p, client, budget, tracer, attempts=attempts)
                     row = {"problem_id": p["id"], "config": args.config, "profile": profile, "split": p.get("split"),
@@ -185,7 +203,8 @@ def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipel
                 results.flush()
                 rows.append(row)
                 if args.echo:
-                    print(f"{p['id']:<28} {row['status']:<17} calls={row['llm']['llm_calls']:<3} "
+                    stage = f" stage={row['stage']}" if row.get("stage") else ""
+                    print(f"{p['id']:<28} {row['status']:<17}{stage} calls={row['llm']['llm_calls']:<3} "
                           f"cost=${row['llm']['cost_usd']:.4f} length={row['llm']['length_finishes']} "
                           f"{row['wall_s']:.1f}s", flush=True)
                 if row["status"] == "budget_stop":

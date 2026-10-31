@@ -311,6 +311,19 @@ def closing_candidates_file(thm: Theorem, subgoals: list[str], tactics: list[str
     return _lemma_set(thm, lemmas, heartbeats)
 
 
+def automation_file(thm: Theorem, targets: list[tuple[str, tuple[str, ...], str]], tactics: list[str],
+                    heartbeats: int) -> tuple[str, dict[str, tuple[int, int]]]:
+    """The pre-pass (Phase 5): every target (lemma name, extra binders, goal) closed by every
+    tactic alone, as `<lemma name>_auto<j>` → (file, ranges). Raises UnsafeLean / ValueError."""
+    lemmas = []
+    for base, extra, goal in targets:
+        for j, t in enumerate(tactics, start=1):
+            if "\n" in t.strip():
+                raise ValueError(f"automatic tactics are one line each: {t!r}")
+            lemmas.append((f"{base}_auto{j}", extra, goal, _checked_tactics("automatic tactic", t.strip())))
+    return _lemma_set(thm, lemmas, heartbeats)
+
+
 def assemble(thm: Theorem, subgoals: list[str], blocks: list[str], closing: str) -> str:
     """The final proof: every subgoal block pasted into the skeleton, then `closing`."""
     subgoals = _checked_terms(subgoals)

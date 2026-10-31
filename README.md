@@ -149,6 +149,37 @@ Baselines:
 - Neither node raises: unsafe Lean, invalid JSON, provider errors, budget exhaustion and
   spend stops become statuses in the result and events in the trace.
 
+### 1.5 Autoformalizer and the linear pipeline (Phase 5)
+
+- **Two-layer sanitizer.** `lean/sanitize.py` (a blacklist over the text, offline) runs first.
+  Text that passes is then parsed by Lean's own parser in the REPL (`lean/syntax_check.py`):
+  a tactic block as `by` + block, a proposition as a term, nothing elaborated. Every syntax
+  node kind must be on a whitelist (the tactics olympiad proofs use, core term syntax except
+  quotations / `do` / `unsafe` / `sorry`, and notation terms). Anything else is rejected
+  (`parse`, `syntax`, `search`, …) before compiling. Identifiers are not node kinds, so names
+  such as `sorryAx` or `IO.*` are still the blacklist's job. One REPL command per check.
+- **Pre-pass** (`agents/prepass.py`). Before any LLM call, every tactic of
+  `pipeline.yaml → prepass.tactics` is tried alone on the theorem, in one compilation (one
+  lemma per tactic, heartbeat limit each); the first that compiles is confirmed with
+  `accepted`. After the plan, the same is done for every subgoal lemma. `prepass.enabled:
+  false` (or `run_eval.py --no-prepass`) turns it off for the ablation.
+- **Autoformalizer** (`agents/autoformalizer.py`). Input: the subgoal lemma `<name>_sg<i>`
+  (built by `statement.py`), the Generator's winning sketch and the Retriever's lemmas for
+  that lemma. Output: only the tactic block. The prompt depends on the role's model
+  (`models.yaml → prompt_style`): `chat` (`prompts/autoformalizer.md`, with the Lean 4 cheat
+  sheet `prompts/lean4_cheatsheet.md`, JSON `{"tactics"}`) or `prover`
+  (`prompts/autoformalizer_prover.md`, "Complete the following Lean 4 code" for whole-proof
+  models such as Goedel-Prover; only the tactics after `:= by` of the lemma are kept). The
+  block passes both sanitizer layers and the lemma must be *accepted*.
+- **Linear pipeline** (`orchestrator/linear.py`, `run_eval.py --config LIN`): pre-pass on the
+  theorem → PLAN → pre-pass on the subgoals → GENERATE (only the subgoals automation did not
+  close) → FORMALIZE + VERIFY (one attempt per subgoal) → ASSEMBLE. `statement.assemble`
+  pastes every block, unchanged, into the skeleton with the plan's closing step, and the final
+  file must be *accepted* (Eq. 2): only that sets `solved`. The result records the `stage`
+  where it was solved or stopped (`prepass`, `plan`, `generate:sg<i>`, `formalize:sg<i>`,
+  `verify:sg<i>`, `assemble`). No Critic and no retries yet (Phase 6). Every LLM call counts
+  for `b_max`.
+
 ---
 
 ## 2. Repository structure
@@ -179,7 +210,11 @@ formal-mas/
 │   │   ├── contracts.py         # Pydantic I/O contracts (LemmaHit, PlanProposal, SketchProposal, …)
 │   │   ├── prompting.py         # loads prompts/*.md (SYSTEM:/USER:, {{placeholders}})
 │   │   ├── planner.py           # subgoals + closing step; skeleton, refutation, closing checked, else trivial plan
-│   │   └── generator.py         # N sketches per subgoal, strategy vote (Eq. 9)
+│   │   ├── generator.py         # N sketches per subgoal, strategy vote (Eq. 9)
+│   │   ├── autoformalizer.py    # subgoal lemma + sketch + lemmas → tactic block (chat / prover style)
+│   │   └── prepass.py           # fixed automatic tactics before any LLM call
+│   ├── orchestrator/
+│   │   └── linear.py            # Phase 5 pipeline: prepass → plan → generate → formalize → verify → assemble
 │   ├── baselines/
 │   │   ├── baseline_a.py        # C1: LLM writes the tactic block, Lean verifies
 │   │   └── baseline_b.py        # C2: natural-language proof + self-assessment (unverified)
@@ -187,6 +222,7 @@ formal-mas/
 │   ├── lean/
 │   │   ├── runner.py            # compiles Lean (REPL, fallback per file), acceptance (Eq. 2)
 │   │   ├── sanitize.py          # rejects unsafe generated Lean (escapes, metaprogramming, IO…)
+│   │   ├── syntax_check.py      # parses generated Lean in the REPL; syntax node whitelist
 │   │   └── statement.py         # parses theorems; builds proof files, skeletons, subgoal lemmas
 │   └── retrieval/
 │       ├── corpus.py            # turns the Lean environment dump into corpus entries
@@ -208,7 +244,7 @@ formal-mas/
 │   ├── kaggle_job.py            # embeds the corpus on a free Kaggle GPU
 │   ├── kaggle_embed.py          # the Kaggle kernel itself (runs on Kaggle)
 │   ├── eval_retrieval.py        # Recall@k / MRR of every method
-│   └── run_eval.py              # runs a configuration (C1, C2; PG = Phase 4 preview) over a dataset
+│   └── run_eval.py              # runs a configuration (C1, C2; PG, LIN = Phase 4/5 previews) over a dataset
 │
 ├── lean_project/                # Lean 4 + Mathlib project (pinned versions)
 ├── lean_repl/                   # Lean REPL clone + build (generated, not in git)
@@ -398,13 +434,16 @@ Results are written to `data/retrieval_eval/results_<split>.{json,md,tex}`.
 Model and *k* selection must use the dev split only; the test split is reserved for
 the final numbers.
 
-### 4.4 Running the baselines and the Phase 4 preview
+### 4.4 Running the baselines and the Phase 4/5 previews
 
 ```bash
 MODEL_PROFILE=dev python scripts/run_eval.py --config C1 --data data/smoke.jsonl --echo
 MODEL_PROFILE=dev python scripts/run_eval.py --config C2 --data data/smoke.jsonl --limit 3
 # Planner + Generator only (plans and sketches, no proof); not an experimental configuration
 MODEL_PROFILE=dev python scripts/run_eval.py --config PG --data data/dev_preview.jsonl --echo
+# Phase 5 linear pipeline (proofs, verified by Lean); --no-prepass forces the LLM path
+MODEL_PROFILE=dev python scripts/run_eval.py --config LIN --data data/dev_preview.jsonl --echo
+MODEL_PROFILE=dev python scripts/run_eval.py --config LIN --data data/smoke.jsonl --no-prepass --echo
 ```
 
 Each run writes `runs/<UTC time>_<config>_<profile>/`:
@@ -443,15 +482,19 @@ its cap is actually reached.
 - **Budget, spend, cache and baselines** live in `config/pipeline.yaml`: `budget.b_max`,
   `spend.total_usd`, `spend.run_usd`, `spend.ledger`, `llm.cache`, `llm.cache_dir`,
   `llm.json_repair`, `baselines.*.attempts`, `run.seed`.
-- **Planner and Generator** live in `config/pipeline.yaml` → `planner` (`n_max`, `retrieve`,
-  `check_skeleton`, `refute` and `closing_auto`: `enabled`, `tactics`, `heartbeats`,
-  `timeout_s`) and `generator` (`samples` = *N*, `retrieve`).
+- **Planner, Generator, Autoformalizer and pre-pass** live in `config/pipeline.yaml` →
+  `planner` (`n_max`, `retrieve`, `check_skeleton`, `refute` and `closing_auto`: `enabled`,
+  `tactics`, `heartbeats`, `timeout_s`), `generator` (`samples` = *N*, `retrieve`),
+  `autoformalizer` (`retrieve`) and `prepass` (`enabled`, `tactics`, `heartbeats`,
+  `timeout_s`). The Autoformalizer's prompt style is the role's model's
+  `models.yaml → prompt_style` (`chat` | `prover`).
 - **Retrieval hyperparameters** live in `config/pipeline.yaml` → `retrieval`:
   `method` (`rrf` | `bm25` | `dense`), `k`, `depth`, `rrf_k`, `query_instruction`,
   `generic_query`, `index_dir`, `suggestions`.
 - **Lean runner** settings live in `config/pipeline.yaml` → `lean`: `backend`
   (`repl` | `file`), `base_imports`, `timeout_s`, `startup_timeout_s`, `restart_every`,
-  `restart_memory_mb`, `kill_memory_mb`, `cache_size`.
+  `restart_memory_mb`, `kill_memory_mb`, `cache_size`, `syntax_check` and
+  `syntax_timeout_s` (the parser layer of the sanitizer).
 
 ### 4.6 Tests
 

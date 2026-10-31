@@ -30,6 +30,14 @@ def load(name: str, prompts_dir: Path = PROMPTS_DIR) -> tuple[tuple[str, str], .
     return tuple(sections)
 
 
+@lru_cache(maxsize=None)
+def document(name: str, prompts_dir: Path = PROMPTS_DIR) -> str:
+    """A reference text inserted into prompts (e.g. lean4_cheatsheet.md): the file without
+    its leading `<!-- … -->` comment for humans."""
+    text = (prompts_dir / f"{name}.md").read_text(encoding="utf-8")
+    return re.sub(r"\A\s*<!--.*?-->\s*", "", text, flags=re.S).strip()
+
+
 def placeholders(name: str, prompts_dir: Path = PROMPTS_DIR) -> set[str]:
     return {p for _, t in load(name, prompts_dir) for p in _PLACEHOLDER_RE.findall(t)}
 
