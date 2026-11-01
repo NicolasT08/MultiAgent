@@ -1,0 +1,5 @@
+# C5, Full system (report, IV-A8): all agents active, the Critic's LLM feedback included.
+# k_max is fixed at 3 (team decision 2026-10-31; the report's range is {3,…,5}).
+critic:
+  k_max: 3
+  llm_feedback: true

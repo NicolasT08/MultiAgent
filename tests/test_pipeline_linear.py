@@ -1,6 +1,6 @@
-"""Offline tests of Phase 5: Autoformalizer (chat and prover styles), automation pre-pass and
-the linear pipeline PRE-PASS → PLAN → PRE-PASS → GENERATE → FORMALIZE → VERIFY → ASSEMBLE
-(fake LLM, Lean and Retriever)."""
+"""Offline tests of Phase 5: Autoformalizer (chat and prover styles), automation pre-pass and the
+forward path of the graph, PRE-PASS → PLAN → PRE-PASS → GENERATE → FORMALIZE → VERIFY → ASSEMBLE,
+with one attempt per subgoal (k_max = 1, R_max = 0, as C4). Fake LLM, Lean and Retriever."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from formal_mas.agents.prepass import prepass, subgoal_targets, theorem_target
 from formal_mas.lean.runner import LeanMessage, LeanResult
 from formal_mas.lean.statement import parse_theorem
 from formal_mas.llm.client import LLMClient
-from formal_mas.orchestrator.linear import run_linear
+from formal_mas.orchestrator.graph import run_graph
 from formal_mas.tracing import Budget, Tracer
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,7 +27,7 @@ PROBLEM = {"id": "p", "informal": "If x + y = 5 and x - y = 1 then x * y = 6.",
            "statement": "theorem p (x y : ℝ) (h₀ : x + y = 5) (h₁ : x - y = 1) : x * y = 6 := by sorry"}
 PLAN = json.dumps({"subgoals": ["x = 3", "y = 2"], "closing": "rw [h1, h2]\nnorm_num", "rationale": "solve"})
 TACTICS = ["norm_num", "linarith", "nlinarith"]
-CFG = {"planner": {"n_max": 3}, "generator": {"samples": 2},
+CFG = {"planner": {"n_max": 3}, "generator": {"samples": 2}, "budget": {"b_max": 16}, "critic": {"k_max": 1, "r_max": 0},
        "prepass": {"enabled": True, "tactics": TACTICS, "heartbeats": 1000, "timeout_s": 5}}
 
 
@@ -105,7 +105,7 @@ def events(tracer, name):
 def linear(tmp_path, lean, *script, b_max=16, cfg=CFG, models_cfg=MODELS_CFG):
     client, transport, tracer = client_for(tmp_path, *script, models_cfg=models_cfg)
     budget = Budget(b_max)
-    out = run_linear(PROBLEM, client, lean, FakeRetriever(), budget, tracer, cfg)
+    out = run_graph(PROBLEM, client, lean, FakeRetriever(), budget, tracer, {**cfg, "budget": {"b_max": b_max}})
     return out, budget, transport, tracer
 
 
@@ -271,7 +271,7 @@ def test_linear_subgoal_prepass_skips_generation(tmp_path):
     lean = FakeLean(auto={("p_sg1", "linarith")})
     out, budget, transport, _ = linear(tmp_path, lean, answer({"p_sg2": "linarith"}))
     assert out["status"] == "solved" and out["prepass"]["subgoals"] == {"sg1": "linarith"}
-    assert budget.used == 1 + 2 + 1 and [s["index"] for s in out["generator"]["subgoals"]] == [2]
+    assert budget.used == 1 + 2 + 1 and [g["subgoals"][0]["index"] for g in out["generator"]] == [2]
     assert "  have h1 : x = 3 := by\n    linarith\n" in out["proof"]
 
 
@@ -279,7 +279,7 @@ def test_linear_subgoal_prepass_skips_generation(tmp_path):
 def test_linear_stops_at_the_first_failed_subgoal(tmp_path, tactics, stage):
     out, budget, _, _ = linear(tmp_path, FakeLean(), answer({"p_sg1": tactics, "p_sg2": "linarith"}))
     assert out["status"] == "failed" and out["stage"] == stage and not out["solved"] and out["proof"] is None
-    assert len(out["formalizer"]) == 1 and budget.used == 1 + 4 + 1
+    assert len(out["formalizer"]) == 1 and budget.used == 1 + 2 + 1  # sg2 is not sketched: per-subgoal path
 
 
 def test_linear_assembly_must_be_accepted(tmp_path):
@@ -299,14 +299,14 @@ def test_linear_direct_plan(tmp_path):
 
 def test_linear_budget_and_stops(tmp_path):
     out, budget, _, _ = linear(tmp_path, FakeLean(), answer(), b_max=3)  # planner + 2 sketches, then nothing
-    assert out["status"] == "budget_exhausted" and out["stage"] == "generate:sg2" and budget.used == 3
+    assert out["status"] == "budget_exhausted" and out["stage"] == "formalize:sg1" and budget.used == 3
     out, _, _, _ = linear(tmp_path / "b", FakeLean(), http_error(401))
     assert out["status"] == "provider_error" and out["stage"] == "plan" and not out["solved"]
     # Lean dies everywhere: every node catches it; the planner's trivial plan is unchecked → stop at plan
     out, _, _, tracer = linear(tmp_path / "c", FakeLean(raise_exc=RuntimeError("REPL died")), answer())
     assert out["status"] == "failed" and out["stage"] == "plan" and not out["solved"]
     assert len(events(tracer, "node_error")) == 2  # pre-pass and planner
-    bad = run_linear({"id": "x", "statement": "def f := 1"}, None, FakeLean(), None, Budget(16), Tracer(), CFG)
+    bad = run_graph({"id": "x", "statement": "def f := 1"}, None, FakeLean(), None, Budget(16), Tracer(), CFG)
     assert bad["status"] == "invalid_statement"
 
 
@@ -317,7 +317,7 @@ def test_linear_prepass_off(tmp_path):
     assert out["stage"] == "assemble" and budget.used == 7 and out["prepass"] == {"theorem": None, "subgoals": {}}
 
 
-def test_run_eval_lin(tmp_path, monkeypatch):
+def test_run_eval_c4(tmp_path, monkeypatch):
     monkeypatch.delenv("MODEL_PROFILE", raising=False)
     spec = importlib.util.spec_from_file_location("run_eval_lin", ROOT / "scripts" / "run_eval.py")
     mod = importlib.util.module_from_spec(spec)
@@ -339,7 +339,7 @@ def test_run_eval_lin(tmp_path, monkeypatch):
     class Retr(FakeRetriever):
         mode, warnings = "fake", []
 
-    rc = mod.main(["--config", "LIN", "--data", str(data), "--echo"], models_cfg=MODELS_CFG,
+    rc = mod.main(["--config", "C4", "--data", str(data), "--echo"], models_cfg=MODELS_CFG,
                   pipeline_cfg={**pipeline_cfg(), **CFG},
                   client_kwargs={"transport": FakeTransport(answer()), "cache_dir": tmp_path / "cache",
                                  "clock": clock, "sleep": clock.sleep, "monotonic": clock.monotonic},

@@ -28,14 +28,14 @@
    d. the skeleton with the final closing must compile.
 Any failure → the trivial plan: the whole goal as the only subgoal, closed by `exact h1`
 (checked by a, c and d only), with the reason logged as `plan_fallback`. Never raises:
-the result is {status, plan, lemmas, detail}. status ∈ ok | trivial | invalid_statement |
+the result is {status, plan, lemmas, detail, proposed}. status ∈ ok | trivial | invalid_statement |
 budget_stop | error; `plan` is None only for invalid_statement (and error before parsing).
 """
 
 from __future__ import annotations
 
 from formal_mas.agents.contracts import Plan, PlanProposal
-from formal_mas.agents.prompting import render
+from formal_mas.agents.prompting import fragment, render
 from formal_mas.lean.runner import accepted, compiles, compiles_between
 from formal_mas.lean.statement import (Theorem, UnsafeLean, clean_tactics, closing_candidates_file, closing_lemma,
                                        parse_theorem, proof_file, refutation_file, skeleton)
@@ -48,7 +48,7 @@ __all__ = ["run_planner", "trivial_plan", "lemma_block", "header_summary"]
 
 def lemma_block(hits) -> str:
     """`- name : signature` lines for the prompts (or a note when there are none)."""
-    return "\n".join(f"- {h.name} : {h.signature}" for h in hits) or "(none retrieved)"
+    return "\n".join(f"- {h.name} : {h.signature}" for h in hits) or fragment("no_lemmas")
 
 
 def header_summary(thm: Theorem) -> str:
@@ -161,16 +161,18 @@ def _check_llm_plan(thm: Theorem, plan: Plan, runner, tracer: Tracer, refute: di
 
 def run_planner(problem: dict, client: LLMClient, runner, retriever, budget: Budget, tracer: Tracer, *,
                 n_max: int = 4, retrieve: bool = True, check_skeleton: bool = True,
-                refute: dict | None = None, closing_auto: dict | None = None, syntax=None) -> dict:
-    """`refute` / `closing_auto`: pipeline.yaml → planner.refute / planner.closing_auto
+                refute: dict | None = None, closing_auto: dict | None = None, syntax=None, feedback: str = "",
+                sample: int = 0) -> dict:
+    """`feedback` and `sample`: on a replan, why the last plan failed and a new cache entry.
+    `refute` / `closing_auto`: pipeline.yaml → planner.refute / planner.closing_auto
     ({enabled, tactics, heartbeats, timeout_s}); None turns the step off. `syntax`: a
     lean.syntax_check.SyntaxChecker (Lean's parser + node whitelist) for the model's subgoals
     and closing block, before anything is compiled; None skips that layer (sanitize.py
     always runs)."""
-    out = {"status": "error", "plan": None, "lemmas": [], "detail": None}
+    out = {"status": "error", "plan": None, "lemmas": [], "detail": None, "proposed": []}
     try:
         _run(problem, client, runner, retriever, budget, tracer, n_max, retrieve, check_skeleton,
-             refute, closing_auto, syntax, out)
+             refute, closing_auto, syntax, feedback, sample, out)
     except Exception as exc:  # noqa: BLE001 — a node never raises to the caller
         tracer.event("node_error", level="error", node=ROLE, error=repr(exc)[:1000])
         out.update(status="error", detail=repr(exc)[:1000])
@@ -185,7 +187,7 @@ def run_planner(problem: dict, client: LLMClient, runner, retriever, budget: Bud
 
 
 def _run(problem, client, runner, retriever, budget, tracer, n_max, retrieve, check, refute, closing_auto,
-         syntax, out) -> None:
+         syntax, feedback, sample, out) -> None:
     try:
         thm = parse_theorem(problem["statement"])
     except (ValueError, KeyError) as exc:
@@ -207,11 +209,11 @@ def _run(problem, client, runner, retriever, budget, tracer, n_max, retrieve, ch
                 tracer.event("plan_trivial_skeleton_failed", level="error", node=ROLE, reason=why)
         out.update(status=status, plan=plan.model_dump(), detail=reason[:500])
 
-    messages = render(ROLE, informal=problem.get("informal", "") or "(none)", declaration=thm.declaration(),
+    messages = render(ROLE, informal=problem.get("informal", "") or fragment("no_informal"), declaration=thm.declaration(),
                       header_summary=header_summary(thm), lemmas=lemma_block(hits), n_max=n_max,
-                      hypotheses=", ".join(names))
+                      hypotheses=", ".join(names), feedback=feedback)
     try:
-        proposal, _ = client.complete_json(ROLE, messages, PlanProposal, budget)
+        proposal, _ = client.complete_json(ROLE, messages, PlanProposal, budget, sample=sample)
     except SpendLimitReached as exc:
         return fallback(f"budget_stop: {exc}", status="budget_stop")
     except BudgetExhausted:
@@ -222,6 +224,7 @@ def _run(problem, client, runner, retriever, budget, tracer, n_max, retrieve, ch
         return fallback(f"invalid_output: {exc}")
 
     subgoals = [" ".join(s.split()) for s in proposal.subgoals]
+    out["proposed"] = subgoals
     closing = clean_tactics(proposal.closing)
     if syntax is not None and len(subgoals) <= n_max:
         checked = syntax.check(thm.header, tactics=[closing] if closing.strip() else [], terms=subgoals)

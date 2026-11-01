@@ -40,4 +40,4 @@ Theorem (the file starts with `{{header_summary}}`):
 Mathlib lemmas that may help (name : statement):
 {{lemmas}}
 
-Plan the proof. Return the json object with the fields "subgoals", "closing" and "rationale".
+{{feedback}}Plan the proof. Return the json object with the fields "subgoals", "closing" and "rationale".

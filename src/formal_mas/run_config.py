@@ -18,7 +18,7 @@ from pathlib import Path
 from formal_mas.config import ROOT, load_models, load_pipeline
 from formal_mas.tracing import iso, utc_now
 
-PACKAGES = ("openai", "pydantic", "pyyaml", "numpy", "torch", "faiss-cpu", "sentence-transformers", "psutil")
+PACKAGES = ("langgraph", "openai", "pydantic", "pyyaml", "numpy", "torch", "faiss-cpu", "sentence-transformers", "psutil")
 
 
 def _git(root: Path, *args: str) -> str | None:

@@ -2,7 +2,10 @@
      by prompting.document). Every Lean example below was compiled with the lean-lsp MCP on
      2026-10-29 (`lean_run_code`, Lean v4.36.0-rc1 + Mathlib v4.36.0-rc1, miniF2F header): no
      errors. The amc12b_2004_p3 variants were also checked in the REPL with `accepted` (PLAN.md,
-     Phase 5). Change an example only after compiling it again (skill prompt-tuning). -->
+     Phase 5). The two sections from the calibration (implicit arguments, `omega` with truncated
+     subtraction) were compiled in the REPL with `accepted` on 2026-10-31, lean-lsp not connecting;
+     their wrong variants fail with the messages quoted. Change an example only after compiling it
+     again (skill prompt-tuning). -->
 Syntax (Lean 4, never Lean 3):
 - `fun x => …` (not `λ x, …`); `intro x` (not `assume`); `obtain ⟨x, hx⟩ := h` or `rcases h with ⟨x, hx⟩` (not `cases h with x hx`); `·` to focus a goal; `Nat.succ_le_iff` (namespaces are capitalized).
 - Hypotheses of the lemma are used by name: `linarith [h₁]`, `rw [h1] at h₂`, `exact h₀.1`.
@@ -35,6 +38,30 @@ After `<;>`, every goal must be closed by the same tactic (error `No goals to be
   `interval_cases x <;> interval_cases y <;> simp_all`,
   `interval_cases x <;> interval_cases y <;> (try norm_num at h₀) <;> (try norm_num)`.
 - Rule: after `<;>` use a closer that handles every goal (`omega`, `simp_all`) or wrap each step in `try`; do not combine `at h ⊢` when `h` can become `False`.
+
+Lemmas with implicit type arguments: give the arguments, and check the name exists:
+- Wrong: `rw [← h₀]` then `exact dvd_mul_right _ _`. With `_` the type is still unknown when the instance is sought, so Lean reports `typeclass instance problem is stuck`.
+- Right, naming the arguments: `exact dvd_mul_right (2 ^ x) (3 ^ y)` proves `2 ^ x ∣ 2 ^ x * 3 ^ y`, and `exact dvd_mul_left (3 ^ y) (2 ^ x)` proves `3 ^ y ∣ 2 ^ x * 3 ^ y`.
+- `pow_le_pow_right` does not exist here (`Unknown identifier`). In ℕ: `Nat.pow_le_pow_right (by norm_num) hx : 2 ^ 11 ≤ 2 ^ x` for `hx : 11 ≤ x`. In an ordered field: `pow_le_pow_right₀ (by norm_num) hx : (2 : ℝ) ^ 11 ≤ 2 ^ x`.
+
+`omega` and subtraction in ℕ (`a - b` is 0 when `b > a`):
+- Wrong: `example (a b : ℕ) : a - b + b = a := by omega` fails without `b ≤ a`; right: `example (a b : ℕ) (h : b ≤ a) : a - b + b = a := by omega`.
+- `omega` treats `4 ^ k` as an unknown number, and knows nothing about it, so `4 ^ (k + 1) - 3 + 3 = 4 ^ (k + 1)` fails. Give the fact and expose the atom:
+  ```
+  example (k : ℕ) : 4 ^ (k + 1) - 3 + 3 = 4 ^ (k + 1) := by
+    have h : 0 < 4 ^ k := by positivity
+    rw [pow_succ]
+    omega
+  ```
+- Do not rewrite a goal into a subtraction when an induction works without it:
+  ```
+  example (n : ℕ) : 3 ∣ 2 * 4 ^ n + 1 := by
+    induction n with
+    | zero => norm_num
+    | succ k ih =>
+      rw [pow_succ]
+      omega
+  ```
 
 Induction (Lean 4 syntax):
 ```

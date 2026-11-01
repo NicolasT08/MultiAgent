@@ -1,5 +1,5 @@
 """I/O contracts between agents (RNF-4). Each model exports a JSON Schema via
-`Model.model_json_schema()`; later phases add the Autoformalizer and Critic contracts here."""
+`Model.model_json_schema()`."""
 
 from __future__ import annotations
 
@@ -123,10 +123,40 @@ class SubgoalSketches(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Critic (Phase 6). κ (Eq. 11) and π (Eq. 12) are rules in orchestrator/policy.py; the only LLM
+# output is the optional advice `CriticFeedback`, which never changes the action.
+
+ErrorClass = Literal["syntax", "missing_lemma", "tactic_failure", "misformalization", "timeout", "planning"]
+
+
+class CriticFeedback(BaseModel):
+    """Optional LLM output of the Critic: advice for the next attempt, text only."""
+
+    feedback: str = Field(description="At most three sentences of advice for the next attempt")
+
+
+class Critique(BaseModel):
+    """One pass through the CRITIQUE state: the class, the action and the counters of Eq. 12."""
+
+    subgoal: int | None = Field(default=None, description="1-based subgoal; None for a plan-level failure")
+    reason: str = Field(description="Why it failed (e.g. `lean:error`, `sanitize:sorry`, `refuted:sg2`)")
+    error_class: ErrorClass
+    message_class: ErrorClass = Field(description="κ on this trace alone, before Eq. 11's k_max-strategies rule")
+    action: Literal["abandon", "replan", "retry"]
+    route: str | None = Field(default=None, description="Next state: FORMALIZE, RETRIEVE or GENERATE on a retry")
+    attempts: int = Field(description="a_i, attempts spent on the subgoal")
+    replans: int = Field(description="r, replans performed before this decision")
+    calls: int = Field(description="b, LLM calls consumed")
+    missing_identifier: str | None = None
+    suggestions: list[str] = Field(default_factory=list, description="Real names close to the missing identifier")
+    llm_feedback: bool = Field(default=False, description="Whether the optional LLM advice was added")
+
+
+# ---------------------------------------------------------------------------
 # JSON Schemas (RNF-4): docs/schemas/<Model>.json, kept in sync by tests/test_baselines.py.
 
 SCHEMA_MODELS = (LemmaHit, TacticProof, NLSolution, SelfAssessment, PlanProposal, Plan, SketchProposal, Sketch,
-                 SubgoalSketches)
+                 SubgoalSketches, CriticFeedback, Critique)
 
 
 def schemas() -> dict[str, dict]:

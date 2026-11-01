@@ -12,7 +12,7 @@ Complete the following Lean 4 code:
 {{header}}
 /- Proof sketch ({{strategy}}):
 {{sketch}}
-Mathlib lemmas that may help: {{lemma_names}} -/
+Mathlib lemmas that may help: {{lemma_names}}{{feedback}} -/
 {{lemma}} := by
 ```
 

@@ -143,7 +143,8 @@ def test_c2_failures_never_raise(tmp_path):
 
 
 def test_every_prompt_loads_and_asks_for_json():
-    documents = {"lean4_cheatsheet"}  # reference text inserted into prompts, not a prompt
+    # reference texts inserted into prompts, not prompts
+    documents = {"lean4_cheatsheet", "fragments", "feedback_retry", "feedback_replan"}
     prover = {"autoformalizer_prover"}  # whole-proof models: one user turn, answer is a Lean block, no JSON
     names = sorted(p.stem for p in prompting.PROMPTS_DIR.glob("*.md") if p.stem not in documents | prover)
     assert {"baseline_a", "baseline_b_solve", "baseline_b_assess", "json_repair", "autoformalizer"} <= set(names)

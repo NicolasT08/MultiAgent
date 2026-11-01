@@ -1,0 +1,4 @@
+# C4, No-Critic (report, IV-A8): full pipeline with k_max = 1 and R_max = 0.
+critic:
+  k_max: 1
+  r_max: 0

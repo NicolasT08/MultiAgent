@@ -112,4 +112,5 @@ def pipeline_cfg(cache: bool = True, json_repair: bool = True, total_usd: float 
                  ledger=None) -> dict:
     """`ledger=None` keeps the spend ledger in memory: tests never touch data/spend_ledger.jsonl."""
     return {"llm": {"cache": cache, "json_repair": json_repair}, "budget": {"b_max": 16},
+            "critic": {"k_max": 3, "r_max": 1},
             "spend": {"total_usd": total_usd, "run_usd": run_usd, "ledger": ledger, "default_max_tokens": 65536}}

@@ -1,0 +1,5 @@
+# C3, No-RAG (report, IV-A8): full pipeline with R_k(g) = ∅, so also no name suggestions.
+retrieval:
+  enabled: false
+critic:
+  llm_feedback: true

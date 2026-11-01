@@ -1,0 +1,2 @@
+# C2, Baseline B (report, IV-A8): single LLM, natural-language chain of thought, no formal verification.
+flow: baseline_b

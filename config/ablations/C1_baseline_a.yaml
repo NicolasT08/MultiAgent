@@ -1,0 +1,9 @@
+# C1, Baseline A (report, IV-A8): single LLM, direct prompting for a Lean 4 proof, no agents.
+# Budget (team rule, PLAN.md Phase 6, measured 2026-10-31): C1 costs more per call than C5, so it gets C5's mean calls
+# per problem on dev (9.6, rounded up): the same mean computation, not the same B_max.
+flow: baseline_a
+budget:
+  b_max: 10
+baselines:
+  baseline_a:
+    attempts: 10

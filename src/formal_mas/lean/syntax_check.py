@@ -97,7 +97,7 @@ TACTICS = frozenset({
     "Lean.Parser.Tactic.renameI", "Lean.Parser.Tactic.subst", "Lean.Parser.Tactic.substVars",
     "Lean.Parser.Tactic.unfold", "Mathlib.Linter.Style.show", "Lean.Parser.Tactic.show",
     # rewriting and simplification
-    "Lean.Parser.Tactic.rwSeq", "Lean.Parser.Tactic.rwRuleSeq", "Lean.Parser.Tactic.rwRule", "Lean.Parser.Tactic.rwaAt",
+    "Lean.Parser.Tactic.rwSeq", "Lean.Parser.Tactic.rwRuleSeq", "Lean.Parser.Tactic.rwRule", "Lean.Parser.Tactic.rwaAt", "Lean.Parser.Tactic.rwa", "Lean.calc",
     "Lean.Parser.Tactic.tacticErw___", "Mathlib.Tactic.tacticNth_rewrite_____", "Mathlib.Tactic.tacticNth_rw_____",
     "Mathlib.Tactic.tacticSimp_rw___", "Lean.Parser.Tactic.simp", "Lean.Parser.Tactic.simpAll",
     "Lean.Parser.Tactic.simpArgs", "Lean.Parser.Tactic.simpLemma", "Lean.Parser.Tactic.simpErase",

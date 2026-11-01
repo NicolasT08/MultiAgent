@@ -35,6 +35,7 @@ OLYMPIAD = [
     "split_ifs with h", "all_goals linarith", "first | omega | simp", "try simp", "decide", "aesop", "tauto",
     "exact ∑ i ∈ Finset.range 3, i", "exact ⌊x⌋", "exact √x", "exact |x|", "exact x ≡ y [MOD 3]",
     "rcases Nat.even_or_odd n with ⟨k, rfl⟩ | ⟨k, rfl⟩", "obtain ⟨k, hk⟩ : ∃ k, n = 2 * k := ⟨n / 2, by omega⟩",
+    "rwa [h] at h2", "rwa [h]", "exact calc x = y := h\n  _ = z := h2", "calc x = y := h\n  _ = z := h2",
     "interval_cases x <;> interval_cases y <;> omega", "constructor <;> intro h <;> linarith",
     "induction n with\n| zero => simp\n| succ n ih =>\n  rw [pow_succ]\n  omega", "exact .inl rfl",
     # parenthesised tactics and goal combinators (missing from the first whitelist: the dev run of
@@ -47,6 +48,7 @@ OLYMPIAD = [
 PARSER_ONLY = {
     "polyrith": "search", "simp?": "search", "rw?": "search", "aesop?": "search", "hint": "search",
     "simp? says simp": "search", "trace_state": "syntax", "extract_goal": "syntax", "exact `(1)": "syntax",
+    "rwa [(by exact?)]": "search", "exact calc x = y := by exact?\n  _ = z := h": "search",
     "exact ``Nat": "syntax", "exact do pure 1": "syntax", "exact (h": "parse",
 }
 

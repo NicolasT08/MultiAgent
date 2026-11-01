@@ -1,5 +1,5 @@
 """Phase 5 with the real Lean REPL (`pytest -m slow`): the automation pre-pass and the
-assembled proof of the linear pipeline (fake LLM)."""
+assembled proof of the graph's forward path (fake LLM)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from formal_mas.config import load_pipeline
 from formal_mas.lean.runner import LeanRunner
 from formal_mas.lean.statement import parse_theorem
 from formal_mas.lean.syntax_check import SyntaxChecker
-from formal_mas.orchestrator.linear import run_linear
+from formal_mas.orchestrator.graph import run_graph
 from formal_mas.tracing import Budget, Tracer
 from test_pipeline_linear import PROBLEM, FakeRetriever, answer, client_for
 
@@ -55,13 +55,14 @@ def events_seconds(tracer):
     return next(e["seconds"] for e in tracer.events if e["event"] == "prepass")
 
 
-def test_linear_pipeline_assembles_an_accepted_proof(runner, tmp_path):
-    cfg = {"planner": {"n_max": 3}, "generator": {"samples": 2}, "prepass": {**PREPASS, "enabled": False}}
+def test_graph_assembles_an_accepted_proof(runner, tmp_path):
+    cfg = {"planner": {"n_max": 3}, "generator": {"samples": 2}, "prepass": {**PREPASS, "enabled": False},
+           "budget": {"b_max": 16}, "critic": {"k_max": 1, "r_max": 0}}
     client, _, tracer = client_for(tmp_path, answer({"p_sg1": "linarith", "p_sg2": "linarith [h1]"}))
-    out = run_linear(PROBLEM, client, runner, FakeRetriever(), Budget(16), tracer, cfg, syntax=SyntaxChecker(runner))
+    out = run_graph(PROBLEM, client, runner, FakeRetriever(), Budget(16), tracer, cfg, syntax=SyntaxChecker(runner))
     assert out["status"] == "solved" and out["stage"] == "assemble", out
     assert out["final"]["accepted"] and "have h2 : y = 2 := by\n    linarith [h1]" in out["proof"]
     # a wrong block is rejected by Lean at its own lemma, before assembly
     client, _, tracer = client_for(tmp_path / "b", answer({"p_sg1": "norm_num", "p_sg2": "linarith"}))
-    out = run_linear(PROBLEM, client, runner, FakeRetriever(), Budget(16), tracer, cfg, syntax=SyntaxChecker(runner))
+    out = run_graph(PROBLEM, client, runner, FakeRetriever(), Budget(16), tracer, cfg, syntax=SyntaxChecker(runner))
     assert out["status"] == "failed" and out["stage"] == "verify:sg1"

@@ -23,7 +23,7 @@ from collections import Counter
 
 from formal_mas.agents.contracts import STRATEGIES, Plan, Sketch, SketchProposal, SubgoalSketches
 from formal_mas.agents.planner import lemma_block
-from formal_mas.agents.prompting import render
+from formal_mas.agents.prompting import fragment, render
 from formal_mas.lean.statement import Theorem, UnsafeLean, parse_theorem, subgoal_statement
 from formal_mas.llm.client import LLMClient, LLMOutputError, ProviderError, SpendLimitReached
 from formal_mas.tracing import Budget, BudgetExhausted, Tracer
@@ -48,22 +48,24 @@ def vote(samples: list[Sketch]) -> tuple[dict[str, int], str | None, Sketch | No
 
 def _plan_text(plan: Plan) -> str:
     lines = [f"{i}. {h} : {p}" for i, (h, p) in enumerate(zip(plan.hypotheses, plan.subgoals), start=1)]
-    lines.append(f"Closing step (Lean, already checked):\n```lean\n{plan.closing}\n```")
+    lines.append(fragment("closing_step", closing=plan.closing))
     return "\n".join(lines)
 
 
 def _sketch_subgoal(problem: dict, thm: Theorem, plan: Plan, i: int, client: LLMClient, retriever, budget: Budget,
-                    tracer: Tracer, samples: int, retrieve: bool) -> SubgoalSketches:
+                    tracer: Tracer, samples: int, retrieve: bool, hits=None, feedback: str = "",
+                    sample_offset: int = 0) -> SubgoalSketches:
     res = SubgoalSketches(index=i, subgoal=plan.subgoals[i - 1])
     _, target = subgoal_statement(thm, plan.subgoals, i)
-    hits = retriever.retrieve(target) if (retrieve and retriever is not None) else []
+    if hits is None:
+        hits = retriever.retrieve(target) if (retrieve and retriever is not None) else []
     res.lemmas = [h.name for h in hits]
-    messages = render(ROLE, informal=problem.get("informal", "") or "(none)", theorem=thm.declaration(),
+    messages = render(ROLE, informal=problem.get("informal", "") or fragment("no_informal"), theorem=thm.declaration(),
                       plan=_plan_text(plan), index=i, count=len(plan.subgoals), target=target,
-                      lemmas=lemma_block(hits), strategies=", ".join(STRATEGIES))
+                      lemmas=lemma_block(hits), strategies=", ".join(STRATEGIES), feedback=feedback)
     for j in range(samples):
         try:
-            prop, _ = client.complete_json(ROLE, messages, SketchProposal, budget, sample=j)
+            prop, _ = client.complete_json(ROLE, messages, SketchProposal, budget, sample=sample_offset + j)
         except BudgetExhausted:
             res.status = "budget_exhausted"
             break
@@ -90,18 +92,23 @@ def _sketch_subgoal(problem: dict, thm: Theorem, plan: Plan, i: int, client: LLM
 
 
 def run_generator(problem: dict, plan: Plan | dict | None, client: LLMClient, retriever, budget: Budget,
-                  tracer: Tracer, *, samples: int = 3, retrieve: bool = True, indices=None) -> dict:
-    """`indices`: only these subgoals (1-based; e.g. those the pre-pass did not close)."""
+                  tracer: Tracer, *, samples: int = 3, retrieve: bool = True, indices=None, hits=None,
+                  feedback: str = "", sample_offset: int = 0) -> dict:
+    """`indices`: only these subgoals (1-based; e.g. those the pre-pass did not close).
+    The graph's retries also pass `hits` (the RETRIEVE node's lemmas, instead of querying here),
+    `feedback` (the Critic's f of Eq. 8) and `sample_offset` (a new cache entry per attempt)."""
     out = {"status": "error", "subgoals": [], "detail": None}
     try:
-        _run(problem, plan, client, retriever, budget, tracer, samples, retrieve, indices, out)
+        _run(problem, plan, client, retriever, budget, tracer, samples, retrieve, indices, hits, feedback,
+             sample_offset, out)
     except Exception as exc:  # noqa: BLE001 — a node never raises to the caller
         tracer.event("node_error", level="error", node=ROLE, error=repr(exc)[:1000])
         out.update(status="error", detail=repr(exc)[:1000])
     return out
 
 
-def _run(problem, plan, client, retriever, budget, tracer, samples, retrieve, indices, out) -> None:
+def _run(problem, plan, client, retriever, budget, tracer, samples, retrieve, indices, hits, feedback, sample_offset,
+         out) -> None:
     try:
         thm = parse_theorem(problem["statement"])
         plan = plan if isinstance(plan, Plan) else Plan.model_validate(plan)
@@ -113,7 +120,8 @@ def _run(problem, plan, client, retriever, budget, tracer, samples, retrieve, in
         if indices is not None and i not in indices:
             continue
         try:
-            res = _sketch_subgoal(problem, thm, plan, i, client, retriever, budget, tracer, samples, retrieve)
+            res = _sketch_subgoal(problem, thm, plan, i, client, retriever, budget, tracer, samples, retrieve, hits, feedback,
+                                  sample_offset)
         except (UnsafeLean, ValueError, IndexError) as exc:  # a plan that skipped the Planner's checks
             res = SubgoalSketches(index=i, subgoal=plan.subgoals[i - 1], status="error",
                                   failures=[{"reason": "build_failed", "detail": str(exc)[:500]}])

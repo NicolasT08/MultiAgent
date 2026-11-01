@@ -1,11 +1,16 @@
-# Pipeline hyperparameters (k_max, r_max, N, b_max... arrive in later phases).
+# Pipeline hyperparameters; values of the report (Section IV-A), approved by the team 2026-10-31.
+# config/ablations/C*.yaml override these keys per configuration (CLAUDE.md §1.7).
 # Models are never named here: they live in config/models.yaml.
 
+flow: full                  # full | baseline_a (C1) | baseline_b (C2): the graph's entry route
+
 retrieval:
+  enabled: true             # false: R_k(g) = ∅ and no name suggestions (C3)
   # Chosen on Q-dev in Phase 1.4 (2026-10-17): RRF over BM25 and the dense model
   # `embeddings.selected` (models.yaml), query with the model's instruction, k = 16.
   method: rrf               # rrf (BM25 + dense) | bm25 | dense
   k: 16                     # lemmas returned to the Generator (~1.5k tokens of name + signature)
+  k_retry: 32               # k after a missing_lemma failure (Eq. 12); ~3.1k tokens, measured in Phase 1.4
   depth: 100                # candidates taken from each ranker before fusion
   rrf_k: 60                 # RRF constant: score(d) = sum 1 / (rrf_k + rank)
   query_instruction: true   # prepend the dense model's query instruction
@@ -48,7 +53,15 @@ run:
 budget:
   # Hard limit of LLM calls per problem (CLAUDE.md §1.5). Every logical call counts once:
   # cache hits and the JSON repair call included; transport retries of the same call do not.
-  b_max: 16
+  # Eq. 13 with n_max = 3, k_max = 3, N = 3, R_max = 1, b_P = 1: min{40, 92} = 40.
+  b_max: 40
+
+critic:
+  # Phase 6 (orchestrator/policy.py, agents/critic.py). π of Eq. 12 is rules; these are its limits.
+  k_max: 3                  # attempts per subgoal, per plan
+  r_max: 1                  # replans per problem
+  llm_feedback: false       # one extra `critic` LLM call of advice per retry; never changes the action.
+                            # On in C3 and C5 (config/ablations/); C4 never retries, so it never applies
 
 spend:
   # Hard caps on real money (llm/spend.py). A paid call is sent only if its worst-case cost
@@ -69,7 +82,7 @@ planner:
   # tactic block; the code checks each piece (lean/sanitize.py), builds the skeleton
   # (statement.skeleton) and compiles it with `sorry` allowed. On any failure: the trivial
   # plan (the whole goal as the only subgoal), with the reason in the trace.
-  n_max: 4
+  n_max: 3
   retrieve: true            # give the model the Retriever's top-k lemmas (query: the theorem)
   check_skeleton: true      # compile the skeleton (REPL, ~0.1-0.5 s); false only in tests
   # Refutation (2026-10-29, team decision): before accepting a plan, try to prove the negation
@@ -98,17 +111,14 @@ generator:
   # Phase 4 (agents/generator.py). N natural-language sketches per subgoal
   # (self-consistency), each labelled with a strategy of contracts.STRATEGIES; majority vote
   # over the labels (Eq. 9), ties broken by the order of STRATEGIES. Every sample is one
-  # LLM call for b_max: planner (1) + n_max × samples (4 × 3 = 12) = 13 ≤ 16 before any
-  # JSON repair. Phase 5 adds the Autoformalizer, so this split will be revisited there.
+  # LLM call for b_max.
   samples: 3
   retrieve: true            # condition each subgoal on its own top-k lemmas (query: the subgoal)
 
 autoformalizer:
-  # Phase 5 (agents/autoformalizer.py). One call per subgoal not closed by the pre-pass:
-  # subgoal lemma + winning sketch + lemmas → tactic block (prompt by models.yaml →
-  # prompt_style: chat | prover). b_max per problem: planner 1 + n × (samples + 1)
-  # = 1 + 4 × 4 = 17 > 16 for a 4-subgoal plan with no subgoal closed by the pre-pass
-  # (the call that would pass b_max is refused: budget_exhausted).
+  # Phase 5 (agents/autoformalizer.py). One call per attempt on a subgoal not closed by the
+  # pre-pass: subgoal lemma + winning sketch + lemmas → tactic block (prompt by models.yaml →
+  # prompt_style: chat | prover).
   retrieve: true            # the subgoal lemma's own top-k lemmas (same query as the Generator)
 
 prepass:
@@ -124,6 +134,7 @@ prepass:
 baselines:
   # C1: the LLM writes only the tactic block (statement.proof_file builds the file,
   # sanitize checks it, the runner verifies). Independent samples, no error feedback.
+  # The budget of C1 is set in config/ablations/C1_baseline_a.yaml.
   baseline_a:
     attempts: 4
   # C2: natural-language solution + self-assessment by the same model, never verified.

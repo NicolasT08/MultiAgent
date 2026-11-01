@@ -38,6 +38,15 @@ def document(name: str, prompts_dir: Path = PROMPTS_DIR) -> str:
     return re.sub(r"\A\s*<!--.*?-->\s*", "", text, flags=re.S).strip()
 
 
+def fragment(key: str, prompts_dir: Path = PROMPTS_DIR, **values) -> str:
+    """One short text of prompts/fragments.md with its {values} filled."""
+    for line in document("fragments", prompts_dir).splitlines():
+        name, sep, text = line.partition(": ")
+        if sep and name == key:
+            return text.replace("\\n", "\n").format(**values)
+    raise KeyError(f"no prompt fragment {key!r}")
+
+
 def placeholders(name: str, prompts_dir: Path = PROMPTS_DIR) -> set[str]:
     return {p for _, t in load(name, prompts_dir) for p in _PLACEHOLDER_RE.findall(t)}
 

@@ -125,9 +125,9 @@ def test_contracts():
 
 def test_prompts_have_the_expected_placeholders():
     assert prompting.placeholders("planner") == {"informal", "declaration", "header_summary", "lemmas", "n_max",
-                                                 "hypotheses"}
+                                                 "hypotheses", "feedback"}
     assert prompting.placeholders("generator") == {"informal", "theorem", "plan", "index", "count", "target",
-                                                   "lemmas", "strategies"}
+                                                   "lemmas", "strategies", "feedback"}
 
 
 # -- planner -------------------------------------------------------------------

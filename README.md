@@ -30,8 +30,8 @@ PLAN → RETRIEVE → GENERATE → FORMALIZE → VERIFY → (CRITIC: retry / rep
 - **Critic** classifies errors with fixed rules and applies a deterministic policy,
   under a hard budget of `b_max` LLM calls per problem.
 
-Five configurations (C1–C5: two baselines, no-RAG, no-Critic, full system) will share
-the same graph and differ only by flags in `config/ablations/`.
+Five configurations (C1–C5: two baselines, no-RAG, no-Critic, full system) share the same
+compiled graph and differ only by flags in `config/ablations/`.
 
 ### 1.2 What works today: the Retriever (Phase 1)
 
@@ -149,7 +149,7 @@ Baselines:
 - Neither node raises: unsafe Lean, invalid JSON, provider errors, budget exhaustion and
   spend stops become statuses in the result and events in the trace.
 
-### 1.5 Autoformalizer and the linear pipeline (Phase 5)
+### 1.5 Autoformalizer (Phase 5)
 
 - **Two-layer sanitizer.** `lean/sanitize.py` (a blacklist over the text, offline) runs first.
   Text that passes is then parsed by Lean's own parser in the REPL (`lean/syntax_check.py`):
@@ -171,14 +171,33 @@ Baselines:
   (`prompts/autoformalizer_prover.md`, "Complete the following Lean 4 code" for whole-proof
   models such as Goedel-Prover; only the tactics after `:= by` of the lemma are kept). The
   block passes both sanitizer layers and the lemma must be *accepted*.
-- **Linear pipeline** (`orchestrator/linear.py`, `run_eval.py --config LIN`): pre-pass on the
-  theorem → PLAN → pre-pass on the subgoals → GENERATE (only the subgoals automation did not
-  close) → FORMALIZE + VERIFY (one attempt per subgoal) → ASSEMBLE. `statement.assemble`
-  pastes every block, unchanged, into the skeleton with the plan's closing step, and the final
-  file must be *accepted* (Eq. 2): only that sets `solved`. The result records the `stage`
-  where it was solved or stopped (`prepass`, `plan`, `generate:sg<i>`, `formalize:sg<i>`,
-  `verify:sg<i>`, `assemble`). No Critic and no retries yet (Phase 6). Every LLM call counts
-  for `b_max`.
+
+### 1.6 Critic and the state graph (Phase 6)
+
+- **Graph** (`orchestrator/graph.py`, LangGraph, one compiled `GRAPH`): pre-pass on the theorem →
+  PLAN → pre-pass on the subgoals → per subgoal RETRIEVE → GENERATE → FORMALIZE → VERIFY → ASSEMBLE →
+  DONE, with CRITIQUE after any failure. `statement.assemble` pastes every block, unchanged, into the
+  skeleton with the closing step, and only `accepted` (Eq. 2) on that file sets `solved`. The result
+  records the `stage` where it was solved or stopped (`prepass`, `plan`, `generate:sg<i>`,
+  `formalize:sg<i>`, `verify:sg<i>`, `assemble`). No node raises.
+- **Classifier κ** (Eq. 11, `orchestrator/policy.py`): maps a failure to one of `syntax`,
+  `missing_lemma`, `tactic_failure`, `misformalization`, `timeout`, `planning`, by fixed rules.
+  `misformalization` is a Lean error positioned strictly before the `:=` that ends the lemma's
+  statement: the statement itself does not elaborate. A subgoal that failed with `k_max` distinct
+  strategies is `planning` (Eq. 11), except with `k_max = 1` (C4); `message_class` keeps the original class.
+- **Policy π** (Eq. 12, same file): abandon if `b ≥ b_max` or (`a_i ≥ k_max` and `r ≥ r_max`); replan
+  if (`a_i ≥ k_max` or the class is `planning`) and `r < r_max`; otherwise retry: `syntax` → FORMALIZE
+  (sketch kept), `missing_lemma` → RETRIEVE (identifier added to the query, `retrieval.k_retry`), any
+  other class → GENERATE. Both functions are pure, with no LLM.
+- **Feedback** (`agents/critic.py`): deterministic by default (Lean's message with the goal state, the
+  failed block, `Retriever.suggest_names` for a missing name). `critic.llm_feedback: true` (C3, C5) adds
+  one LLM call of advice per retry; it counts for `b_max` and cannot change the action.
+- **Bound** (Proposition 1, Eq. 13): `C ≤ min{b_max, (r_max + 1)(1 + n_max · k_max · (N + 2))}`, tested with
+  random LLM and Lean behaviour (`tests/test_graph.py`). A JSON repair call counts for `b_max` but is
+  not in the structural term, so with repairs only `b_max` bounds the calls.
+- **Configurations** (`config/ablations/`): C1 `flow: baseline_a`, `b_max: 10` (C5's mean calls per problem on dev); C2 `flow: baseline_b`; C3
+  `retrieval.enabled: false` (no lemmas, no name suggestions), Critic advice on; C4 `k_max: 1, r_max: 0`;
+  C5 the full system, Critic advice on.
 
 ---
 
@@ -214,7 +233,8 @@ formal-mas/
 │   │   ├── autoformalizer.py    # subgoal lemma + sketch + lemmas → tactic block (chat / prover style)
 │   │   └── prepass.py           # fixed automatic tactics before any LLM call
 │   ├── orchestrator/
-│   │   └── linear.py            # Phase 5 pipeline: prepass → plan → generate → formalize → verify → assemble
+│   │   ├── graph.py             # the LangGraph state graph shared by C1–C5
+│   │   └── policy.py            # classifier κ (Eq. 11) and policy π (Eq. 12): rules, no LLM
 │   ├── baselines/
 │   │   ├── baseline_a.py        # C1: LLM writes the tactic block, Lean verifies
 │   │   └── baseline_b.py        # C2: natural-language proof + self-assessment (unverified)
@@ -244,7 +264,7 @@ formal-mas/
 │   ├── kaggle_job.py            # embeds the corpus on a free Kaggle GPU
 │   ├── kaggle_embed.py          # the Kaggle kernel itself (runs on Kaggle)
 │   ├── eval_retrieval.py        # Recall@k / MRR of every method
-│   └── run_eval.py              # runs a configuration (C1, C2; PG, LIN = Phase 4/5 previews) over a dataset
+│   └── run_eval.py              # runs a configuration (C1–C5; PG = Phase 4 preview) over a dataset
 │
 ├── lean_project/                # Lean 4 + Mathlib project (pinned versions)
 ├── lean_repl/                   # Lean REPL clone + build (generated, not in git)
@@ -434,16 +454,17 @@ Results are written to `data/retrieval_eval/results_<split>.{json,md,tex}`.
 Model and *k* selection must use the dev split only; the test split is reserved for
 the final numbers.
 
-### 4.4 Running the baselines and the Phase 4/5 previews
+### 4.4 Running the configurations
 
 ```bash
 MODEL_PROFILE=dev python scripts/run_eval.py --config C1 --data data/smoke.jsonl --echo
 MODEL_PROFILE=dev python scripts/run_eval.py --config C2 --data data/smoke.jsonl --limit 3
 # Planner + Generator only (plans and sketches, no proof); not an experimental configuration
 MODEL_PROFILE=dev python scripts/run_eval.py --config PG --data data/dev_preview.jsonl --echo
-# Phase 5 linear pipeline (proofs, verified by Lean); --no-prepass forces the LLM path
-MODEL_PROFILE=dev python scripts/run_eval.py --config LIN --data data/dev_preview.jsonl --echo
-MODEL_PROFILE=dev python scripts/run_eval.py --config LIN --data data/smoke.jsonl --no-prepass --echo
+# The full system and its ablations; --no-prepass forces the LLM path
+MODEL_PROFILE=dev python scripts/run_eval.py --config C5 --data data/dev_preview.jsonl --echo
+MODEL_PROFILE=dev python scripts/run_eval.py --config C3 --data data/dev_preview.jsonl --echo
+MODEL_PROFILE=dev python scripts/run_eval.py --config C4 --data data/smoke.jsonl --no-prepass --echo
 ```
 
 Each run writes `runs/<UTC time>_<config>_<profile>/`:
@@ -453,8 +474,8 @@ Each run writes `runs/<UTC time>_<config>_<profile>/`:
   RAG index metadata, dataset hash, git commit and uncommitted changes. It is written at
   the start and rewritten at the end.
 - `trace.jsonl`: one event per line, covering LLM calls, retries, attempts, Lean checks and warnings.
-- `results.jsonl`: one line per problem with status, attempts, LLM calls, tokens, cost and
-  `length` finishes.
+- `results.jsonl`: one line per problem with status, stage, `error_classes`, `critiques`, replans,
+  LLM calls, tokens, cost and `length` finishes.
 
 `experiment` runs are paid and need the team's explicit permission. `run_eval.py` warns
 (without blocking) when a run starts inside DeepSeek's peak-price window (01:00–04:00
@@ -479,6 +500,8 @@ its cap is actually reached.
   toggle thinking, prices and peak windows), and `profiles` (role → model and request
   parameters; `same_as` copies a role). Never write model names in code. To change the
   embedding model, edit `embeddings.selected` (and rebuild its index).
+- **Control flow** lives in `config/pipeline.yaml`: `flow`, `critic.k_max`, `critic.r_max`,
+  `critic.llm_feedback`, and each configuration's overrides in `config/ablations/`.
 - **Budget, spend, cache and baselines** live in `config/pipeline.yaml`: `budget.b_max`,
   `spend.total_usd`, `spend.run_usd`, `spend.ledger`, `llm.cache`, `llm.cache_dir`,
   `llm.json_repair`, `baselines.*.attempts`, `run.seed`.

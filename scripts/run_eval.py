@@ -3,17 +3,13 @@
     MODEL_PROFILE=dev python scripts/run_eval.py --config C1 --data data/smoke.jsonl --echo
     MODEL_PROFILE=dev python scripts/run_eval.py --config C2 --data data/smoke.jsonl --limit 3
 
-Phase 3 provides C1 (baseline A) and C2 (baseline B); C3-C5 arrive with the graph (Phase 6).
+C1-C5 all run on the one graph of orchestrator/graph.py; a configuration is pipeline.yaml plus the
+flags of config/ablations/<config>_*.yaml. `solved` comes only from the acceptance predicate.
 `--config PG` is the Phase 4 preview, not an experimental configuration: Planner + Generator
 only (plans and sketches, no proof), one shared budget per problem:
 
     MODEL_PROFILE=dev python scripts/run_eval.py --config PG --data data/dev_preview.jsonl --echo
 
-`--config LIN` is the Phase 5 pipeline, also a preview (C3-C5 arrive with the graph):
-pre-pass → plan → pre-pass → generate → formalize → verify → assemble, no Critic, one attempt
-per subgoal (orchestrator/linear.py); `solved` comes only from the acceptance predicate.
-
-    MODEL_PROFILE=dev python scripts/run_eval.py --config LIN --data data/smoke.jsonl --echo
 Outputs: run_config.json (RNF-2, rewritten at the end), trace.jsonl (RNF-5), results.jsonl
 (one line per problem). The profile comes from MODEL_PROFILE (models.yaml → default_profile).
 Paid profiles need the team's explicit permission (CLAUDE.md §2).
@@ -37,21 +33,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from formal_mas.agents.generator import run_generator  # noqa: E402
 from formal_mas.agents.planner import run_planner  # noqa: E402
-from formal_mas.baselines.baseline_a import run_baseline_a  # noqa: E402
-from formal_mas.baselines.baseline_b import run_baseline_b  # noqa: E402
-from formal_mas.config import ROOT, load_models, load_pipeline  # noqa: E402
+from formal_mas.config import ABLATIONS, ROOT, apply_ablation, load_models, load_pipeline  # noqa: E402
 from formal_mas.lean.runner import LeanRunner  # noqa: E402
 from formal_mas.llm.client import LLMClient  # noqa: E402
 from formal_mas.llm.pricing import in_peak  # noqa: E402
 from formal_mas.llm.spend import SpendGuard  # noqa: E402
 from formal_mas.llm.specs import profile_name  # noqa: E402
 from formal_mas.lean.syntax_check import SyntaxChecker  # noqa: E402
-from formal_mas.orchestrator.linear import run_linear  # noqa: E402
+from formal_mas.orchestrator.graph import run_graph  # noqa: E402
 from formal_mas.retrieval.retriever import Retriever  # noqa: E402
 from formal_mas.run_config import build_run_config, write_run_config  # noqa: E402
 from formal_mas.tracing import Budget, Tracer, iso, utc_now  # noqa: E402
 
-CONFIGS = {"C1": "baseline_a", "C2": "baseline_b", "PG": "planner_generator", "LIN": "linear"}
+CONFIGS = (*ABLATIONS, "PG")
 LOG = logging.getLogger("formal_mas.run_eval")
 
 
@@ -115,13 +109,15 @@ def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipel
     ap.add_argument("--run-usd", type=float, default=None,
                     help="lower the per-run spend cap for this run (never above pipeline.yaml → spend.run_usd)")
     ap.add_argument("--no-prepass", action="store_true",
-                    help="LIN: turn the automation pre-pass off (prepass.enabled: false, recorded in run_config.json)")
+                    help="C3-C5: turn the automation pre-pass off (prepass.enabled: false, recorded in run_config.json)")
     args = ap.parse_args(argv)
 
     if not args.data.exists():
         ap.error(f"{args.data} does not exist (data/eval.jsonl arrives in Phase 7; try --data data/smoke.jsonl)")
     models_cfg = models_cfg if models_cfg is not None else load_models()
     pipeline_cfg = pipeline_cfg if pipeline_cfg is not None else load_pipeline()
+    if args.config in ABLATIONS:
+        pipeline_cfg = apply_ablation(pipeline_cfg, args.config)
     if args.no_prepass:
         pipeline_cfg = {**pipeline_cfg, "prepass": {**(pipeline_cfg.get("prepass") or {}), "enabled": False}}
     profile = profile_name(models_cfg)
@@ -129,8 +125,8 @@ def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipel
     problems = load_problems(args.data, split, args.limit)
     seed = args.seed if args.seed is not None else int((pipeline_cfg.get("run") or {}).get("seed", 0))
     b_max = int((pipeline_cfg.get("budget") or {})["b_max"])
-    role = CONFIGS[args.config]
-    attempts = int(((pipeline_cfg.get("baselines") or {}).get(role) or {}).get("attempts", 1))
+    flow = pipeline_cfg.get("flow", "full") if args.config in ABLATIONS else "planner_generator"
+    attempts = int(((pipeline_cfg.get("baselines") or {}).get(flow) or {}).get("attempts", 1))
 
     started = utc_now()
     run_id = f"{started:%Y%m%dT%H%M%SZ}_{args.config}_{profile}" + (f"_{args.run_name}" if args.run_name else "")
@@ -158,8 +154,9 @@ def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipel
         tracer.event("run_peak_warning", level="warning", models=peak, started=iso(started))
         LOG.warning("starting inside a peak-price window for %s (models.yaml → pricing.peak_windows_utc); "
                     "off-peak is cheaper", peak)
-    runner = runner_factory() if role in ("baseline_a", "planner_generator", "linear") else None
-    retriever = retriever_factory() if role in ("planner_generator", "linear") else None
+    runner = runner_factory() if flow != "baseline_b" else None
+    use_rag = flow in ("full", "planner_generator") and (pipeline_cfg.get("retrieval") or {}).get("enabled", True)
+    retriever = retriever_factory() if use_rag else None
     lean_cfg = pipeline_cfg.get("lean") or {}
     syntax = (SyntaxChecker(runner, float(lean_cfg.get("syntax_timeout_s", 30)))
               if runner is not None and lean_cfg.get("syntax_check", False) else None)
@@ -168,7 +165,7 @@ def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipel
         return build_run_config(run_id=run_id, config_name=args.config, seed=seed, dataset=args.data, split=split,
                                 llm_info=client.info(), lean_run_info=runner.run_info() if runner else None,
                                 pipeline_cfg=pipeline_cfg, argv=sys.argv,
-                                extra={"spend": spend.info(), **({"retriever": {"mode": retriever.mode,
+                                extra={"spend": spend.info(), "flow": flow, **({"retriever": {"mode": retriever.mode,
                                                                                 "warnings": retriever.warnings}}
                                                                  if retriever is not None else {}), **extra})
 
@@ -185,15 +182,11 @@ def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipel
                     budget = Budget(b_max)
                     t0 = time.perf_counter()
                     tracer.event("problem_start", config=args.config)
-                    if role == "baseline_a":
-                        res = run_baseline_a(p, client, runner, budget, tracer, attempts=attempts, syntax=syntax)
-                    elif role == "planner_generator":
+                    if flow == "planner_generator":
                         res = run_planner_generator(p, client, runner, retriever, budget, tracer, pipeline_cfg,
                                                     syntax=syntax)
-                    elif role == "linear":
-                        res = run_linear(p, client, runner, retriever, budget, tracer, pipeline_cfg, syntax=syntax)
                     else:
-                        res = run_baseline_b(p, client, budget, tracer, attempts=attempts)
+                        res = run_graph(p, client, runner, retriever, budget, tracer, pipeline_cfg, syntax=syntax)
                     row = {"problem_id": p["id"], "config": args.config, "profile": profile, "split": p.get("split"),
                            "area": p.get("area"), "difficulty": p.get("difficulty"), **res,
                            "llm": budget.summary(), "wall_s": round(time.perf_counter() - t0, 2)}

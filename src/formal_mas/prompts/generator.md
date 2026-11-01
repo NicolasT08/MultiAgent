@@ -32,4 +32,4 @@ Target statement (step {{index}}, with the earlier steps available as hypotheses
 Mathlib lemmas that may help (name : statement):
 {{lemmas}}
 
-Write the sketch. Return the json object with the fields "strategy", "sketch" and "lemmas".
+{{feedback}}Write the sketch. Return the json object with the fields "strategy", "sketch" and "lemmas".

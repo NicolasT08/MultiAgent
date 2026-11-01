@@ -20,3 +20,5 @@ kaggle>=1.7
 # Phase 3 — LLM client (OpenAI-compatible: DeepSeek in `experiment`, Gemini in `dev`).
 # Pinned: the client relies on its exception classes and on `model_dump()` of responses.
 openai==3.39.0
+# Phase 6 — the orchestrator's state graph.
+langgraph==1.2.19
