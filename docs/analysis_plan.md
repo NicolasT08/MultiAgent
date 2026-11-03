@@ -136,7 +136,41 @@ implement exactly this plan; it is tested on `dev` runs before it reads any `tes
 
 ## Deviations
 
-No deviation yet. Clarifications written before any run on `test`:
+No deviation from the analysis itself. Infrastructure incidents during the `test` runs:
+
+- **2026-11-03, C5 on `test` interrupted by low memory.** Run `20261103T174646Z_C5_experiment`
+  (commit `ad70ec2`, clean tree) was killed at about 19:16 UTC by the host (Claude Code stops
+  background jobs when the machine runs critically low on memory; the Lean REPL, ~3.5 GB, was
+  sharing RAM with an idle Lean language server, ~2.7 GB). It is an infrastructure failure, not a
+  decision of the method. 23 of 30 problems had finished and are kept unchanged; the 24th
+  (`imo_1987_p6`) was cut mid-problem and left no row in `results.jsonl`. No row was `lean_down`,
+  and there was no `provider_error` or `budget_stop`.
+  The 7 problems without a row were completed in two resume runs. Both used the same frozen
+  configuration (the analysis is the same at either commit), the same seed and cache, and the
+  language server was stopped first. The input of each is a file holding exactly the needed lines of
+  `data/eval.jsonl`, unchanged and in the original order. Its sha256 and the id list are in that
+  run's `run_config.json`, and a copy is kept as `test_remaining.jsonl` in that run's folder.
+  1. `20261103T212359Z_C5_experiment_resume` (commit `ad70ec2`, clean tree; input sha256
+     `53284f8f…086fc4`) ran all 7 from scratch: `imo_1987_p6`, `imo_1979_p1`, `imo_1984_p6`,
+     `imo_1964_p1_2`, `putnam_1964_b2`, `putnam_1995_b1`, `putnam_1965_b2`. It reached its spend
+     cap (`--run-usd 0.50`) during the third problem. `imo_1987_p6` and `imo_1979_p1` finished
+     (both `failed`). `imo_1984_p6` got a `budget_stop` row after 19 calls, and the last 4 were
+     not attempted.
+  2. `…_C5_experiment_resume2` (commit noted in its `run_config.json`) ran `imo_1984_p6` from scratch,
+     plus the 4 problems not attempted, with `--run-usd 1.00` (the cap raised by team decision, §5).
+     The requests that `imo_1984_p6` repeats from step 1 are answered from the cache.
+  **Merge:** the C5 result on `test` has one row per problem (30 in all), taken from the run where
+  the problem finished:
+  - 23 rows from the first run;
+  - `imo_1987_p6` and `imo_1979_p1` from resume 1;
+  - `imo_1984_p6` and the other 4 from resume 2.
+  The `budget_stop` row of `imo_1984_p6` in resume 1 is discarded; only its complete row counts. The
+  spend of the discarded attempts (`imo_1987_p6` in the first run and `imo_1984_p6` in resume 1)
+  counts towards the project's real cost. It is not in any kept row, so each problem's efficiency
+  figures come from its kept row only. Cache hits lower the real cost of the resume runs but not
+  their nominal cost, and nominal cost is the figure compared (§1).
+
+Clarifications written before any run on `test`:
 
 - **2026-11-03, FPR_B check (§4.2), how "the Autoformalizer–Verifier loop with the same budget" is
   implemented** (`scripts/run_baseline_b.py --check`, `baselines/baseline_b.check_claim`): each claimed
