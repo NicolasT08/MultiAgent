@@ -438,3 +438,95 @@ def test_run_eval_stops_between_problems_when_lean_goes_down(tmp_path, monkeypat
     assert len(rows) == 1 and json.loads(rows[0])["lean_down"] is True  # marked: its failures may be Lean's
     cfg_out = json.loads((run_dir / "run_config.json").read_text(encoding="utf-8"))
     assert cfg_out["status"] == "lean_unavailable"
+
+
+def test_run_baseline_b_check(tmp_path, monkeypatch):
+    """C2 --check: claimed proofs go to the Autoformalizer–Verifier loop; FPR_B over the checked claims."""
+    monkeypatch.delenv("MODEL_PROFILE", raising=False)
+    spec = importlib.util.spec_from_file_location("run_baseline_b_lin", ROOT / "scripts" / "run_baseline_b.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    data = tmp_path / "p.jsonl"
+    rows = [{**PROBLEM, "id": "good", "split": "dev"}, {**PROBLEM, "id": "wrong", "split": "dev"},
+            {**PROBLEM, "id": "unclaimed", "split": "dev"}]
+    data.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    clock = FakeClock()
+
+    def reply(request):
+        system, user = request["messages"][0]["content"], request["messages"][1]["content"]
+        if "careful grader" in system:
+            return json.dumps({"verdict": "incorrect" if "theorem unclaimed" in user or "CLAIM-unclaimed" in user
+                               else "correct", "confidence": 0.9})
+        if "competition mathematician" in system:
+            pid = re.search(r"theorem (\w+)", user).group(1)
+            return json.dumps({"solution": f"CLAIM-{pid}: solve the system.", "final_answer": "6"})
+        if "natural-language proof sketch" in system:
+            return json.dumps({"tactics": "linarith  -- WRONG" if "theorem wrong_sg1" in user else "linarith"})
+        raise AssertionError(system[:80])
+
+    class Runner(FakeLean):
+        base_imports, warnings, available = ["Mathlib"], [], True
+
+        def ensure_available(self):
+            return True
+
+        def close(self):
+            pass
+
+        def run_info(self):
+            return {"backend": "fake"}
+
+    class Retr(FakeRetriever):
+        mode, warnings = "fake", []
+
+        def suggest_names(self, ident, n=None):
+            return []
+
+    with pytest.raises(SystemExit):
+        mod.main(["--config", "C5"])
+    statements = {r["id"]: r["statement"].replace("theorem p ", f"theorem {r['id']} ") for r in rows}
+    data.write_text("".join(json.dumps({**r, "statement": statements[r["id"]]}) + "\n" for r in rows), encoding="utf-8")
+    rc = mod.main(["--data", str(data), "--check", "--echo"], models_cfg=MODELS_CFG,
+                  pipeline_cfg={**pipeline_cfg(), **CFG, "critic": {"k_max": 2, "r_max": 0},
+                                "baselines": {"baseline_b": {"attempts": 1}}},
+                  client_kwargs={"transport": FakeTransport(reply), "cache_dir": tmp_path / "cache",
+                                 "clock": clock, "sleep": clock.sleep, "monotonic": clock.monotonic},
+                  runner_factory=Runner, retriever_factory=Retr, runs_dir=tmp_path / "runs")
+    assert rc == 0
+    run_dir = next((tmp_path / "runs").iterdir())
+    assert run_dir.name.endswith("_C2_experiment_check")
+    out = {r["problem_id"]: r for r in map(json.loads, (run_dir / "results.jsonl").read_text(encoding="utf-8").splitlines())}
+    assert out["good"]["check"]["status"] == "verified" and out["good"]["check"]["llm"]["llm_calls"] == 1
+    assert out["good"]["solved"] is None and out["good"]["llm"]["llm_calls"] == 2  # C2's own calls, check apart
+    assert out["wrong"]["check"]["status"] == "not_verified" and len(out["wrong"]["check"]["attempts"]) == 2
+    assert out["unclaimed"]["check"] == {"status": "not_claimed", "accepted": False}
+    cfg_out = json.loads((run_dir / "run_config.json").read_text(encoding="utf-8"))
+    check = cfg_out["summary"]["check"]
+    assert check["claimed"] == 2 and check["verified"] == 1 and check["not_verified"] == 1 and check["fpr_b"] == 0.5
+    assert check["llm_calls"] == 3 and cfg_out["check"] == {"attempts": 2, "b_max": 16, "retrieval": True}
+
+
+def test_run_eval_check_is_only_for_c2(tmp_path):
+    spec = importlib.util.spec_from_file_location("run_eval_chk", ROOT / "scripts" / "run_eval.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    with pytest.raises(SystemExit):
+        mod.main(["--config", "C5", "--check"])
+
+
+def test_fpr_b_leaves_out_lean_down_and_counts_budget_exhausted():
+    spec = importlib.util.spec_from_file_location("run_eval_fpr", ROOT / "scripts" / "run_eval.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    llm = {"llm_calls": 1, "cost_usd": 0.0, "cost_usd_nominal": 0.0}
+    rows = [{"claimed_solved": True, "check": {"status": "verified", "llm": llm}},
+            {"claimed_solved": True, "check": {"status": "not_verified", "llm": llm}},
+            {"claimed_solved": True, "check": {"status": "budget_exhausted", "llm": llm}},
+            {"claimed_solved": True, "lean_down": True, "check": {"status": "not_verified", "llm": llm}},
+            {"claimed_solved": True, "check": {"status": "provider_error", "llm": llm}},
+            {"claimed_solved": False, "lean_down": True, "check": {"status": "not_claimed", "accepted": False}}]
+    s = mod.summarize_check(rows)
+    assert s["verified"] == 1 and s["not_verified"] == 2 and s["fpr_b"] == round(2 / 3, 6)
+    assert s["status"]["lean_down"] == 1 and s["status"]["provider_error"] == 1 and s["status"]["not_claimed"] == 1
+    assert s["claimed"] == 5 and s["llm_calls"] == 5
+    assert mod.summarize_check([{"claimed_solved": False}]) is None

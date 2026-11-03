@@ -19,6 +19,14 @@ left before the first problem, and the run's cost at the end. When a paid call c
 spend.total_usd or spend.run_usd the problem is `budget_stop` and the run stops there
 (run_config.json status `budget_stop`); the remaining problems are not run.
 
+FPR_B (C2 only, `--check`, usually through scripts/run_baseline_b.py): every claimed proof is
+formalized by baseline_b.check_claim (Autoformalizer–Verifier loop, critic.k_max attempts, its own
+budget of the base pipeline.yaml budget.b_max calls, at most k_max × 2 = 6 in practice); the row gets
+`check` (status, accepted, attempts, its own `llm`) and the summary `check` (claimed, verified,
+not_verified, fpr_b, calls, cost). C2's own `llm` excludes it. FPR_B = not_verified / (verified +
+not_verified); `budget_exhausted` counts as not_verified; a row marked `lean_down`, and checks ended
+by provider_error / budget_stop / error, are left out (re-run once, docs/analysis_plan.md).
+
 Lean (lean/runner.py): before the first problem the runner must load the base imports and answer
 its probes, in the REPL or with the file back-end. If neither works, no problem is run and no LLM
 call is made (status `lean_unavailable`, exit code 2); the same stop happens between problems if
@@ -38,6 +46,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from formal_mas.agents.generator import run_generator  # noqa: E402
 from formal_mas.agents.planner import run_planner  # noqa: E402
+from formal_mas.agents.prompting import fragment  # noqa: E402
+from formal_mas.baselines.baseline_b import check_claim  # noqa: E402
 from formal_mas.config import ABLATIONS, ROOT, apply_ablation, load_models, load_pipeline  # noqa: E402
 from formal_mas.lean.runner import LeanRunner  # noqa: E402
 from formal_mas.llm.client import LLMClient  # noqa: E402
@@ -61,11 +71,48 @@ def load_problems(path: Path, split: str | None, limit: int | None) -> list[dict
     return rows[:limit] if limit else rows
 
 
+def summarize_check(rows: list[dict]) -> dict | None:
+    """FPR_B (Eq. 16) over the claims that were checked to the end (verified or not_verified)."""
+    checks = [r["check"] for r in rows if "check" in r]
+    if not checks:
+        return None
+    status: dict[str, int] = {}
+    for r in rows:  # Lean lost during the row: its check may have failed for Lean, not for the proof
+        if "check" in r:
+            key = "lean_down" if r.get("lean_down") and r["check"]["status"] != "not_claimed" else r["check"]["status"]
+            status[key] = status.get(key, 0) + 1
+    verified = status.get("verified", 0)
+    not_verified = status.get("not_verified", 0) + status.get("budget_exhausted", 0)  # the budget is the method's
+    done = verified + not_verified
+    return {"claimed": sum(1 for r in rows if r.get("claimed_solved")), "status": status, "verified": verified,
+            "not_verified": not_verified, "fpr_b": round(not_verified / done, 6) if done else None,
+            "llm_calls": sum(c["llm"]["llm_calls"] for c in checks if "llm" in c),
+            "cost_usd": round(sum(c["llm"]["cost_usd"] for c in checks if "llm" in c), 6),
+            "cost_usd_nominal": round(sum(c["llm"]["cost_usd_nominal"] for c in checks if "llm" in c), 6)}
+
+
+def run_check(p: dict, res: dict, client, runner, retriever, tracer: Tracer, pipeline_cfg: dict, syntax, b_max: int,
+              rag: bool) -> dict:
+    """`--check`: formalize C2's claimed proof (nothing to check if it claimed nothing)."""
+    if not res.get("claimed_solved"):
+        return {"status": "not_claimed", "accepted": False}
+    solution = res.get("solution") or ""
+    if res.get("final_answer"):
+        solution += fragment("final_answer", answer=res["final_answer"])
+    budget = Budget(b_max)
+    tracer.event("claim_check_start", node="baseline_b_check", b_max=b_max)
+    out = check_claim(p, solution, client, runner, retriever, budget, tracer,
+                      attempts=int((pipeline_cfg.get("critic") or {}).get("k_max", 3)), syntax=syntax, rag=rag,
+                      k_retry=int((pipeline_cfg.get("retrieval") or {}).get("k_retry", 32)))
+    return {**out, "llm": budget.summary()}
+
+
 def summarize(rows: list[dict]) -> dict:
     status: dict[str, int] = {}
     for r in rows:
         status[r["status"]] = status.get(r["status"], 0) + 1
-    return {"problems": len(rows), "status": status,
+    check = summarize_check(rows)
+    return {"problems": len(rows), "status": status, **({"check": check} if check else {}),
             "solved": sum(1 for r in rows if r.get("solved")),
             "claimed_solved": sum(1 for r in rows if r.get("claimed_solved")),
             "llm_calls": sum(r["llm"]["llm_calls"] for r in rows),
@@ -116,12 +163,17 @@ def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipel
                     help="lower the per-run spend cap for this run (never above pipeline.yaml → spend.run_usd)")
     ap.add_argument("--no-prepass", action="store_true",
                     help="C3-C5: turn the automation pre-pass off (prepass.enabled: false, recorded in run_config.json)")
+    ap.add_argument("--check", action="store_true",
+                    help="C2 only: formalize every claimed proof to measure FPR_B (Eq. 16); see the docstring")
     args = ap.parse_args(argv)
+    if args.check and args.config != "C2":
+        ap.error("--check is only for C2 (Baseline B)")
 
     if not args.data.exists():
         ap.error(f"{args.data} does not exist (data/eval.jsonl arrives in Phase 7; try --data data/smoke.jsonl)")
     models_cfg = models_cfg if models_cfg is not None else load_models()
     pipeline_cfg = pipeline_cfg if pipeline_cfg is not None else load_pipeline()
+    check_b_max = int((pipeline_cfg.get("budget") or {}).get("b_max", 0))  # C3-C5's B_max, before any ablation
     if args.config in ABLATIONS:
         pipeline_cfg = apply_ablation(pipeline_cfg, args.config)
     if args.no_prepass:
@@ -135,7 +187,8 @@ def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipel
     attempts = int(((pipeline_cfg.get("baselines") or {}).get(flow) or {}).get("attempts", 1))
 
     started = utc_now()
-    run_id = f"{started:%Y%m%dT%H%M%SZ}_{args.config}_{profile}" + (f"_{args.run_name}" if args.run_name else "")
+    name = args.run_name or ("check" if args.check else None)
+    run_id = f"{started:%Y%m%dT%H%M%SZ}_{args.config}_{profile}" + (f"_{name}" if name else "")
     run_dir = (runs_dir or ROOT / "runs") / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
     if on_run_dir is not None:
@@ -162,8 +215,9 @@ def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipel
         tracer.event("run_peak_warning", level="warning", models=peak, started=iso(started))
         LOG.warning("starting inside a peak-price window for %s (models.yaml → pricing.peak_windows_utc); "
                     "off-peak is cheaper", peak)
-    runner = runner_factory() if flow != "baseline_b" else None
-    use_rag = flow in ("full", "planner_generator") and (pipeline_cfg.get("retrieval") or {}).get("enabled", True)
+    runner = runner_factory() if flow != "baseline_b" or args.check else None
+    use_rag = ((flow in ("full", "planner_generator") or args.check)
+               and (pipeline_cfg.get("retrieval") or {}).get("enabled", True))
     retriever = retriever_factory() if use_rag else None
     lean_cfg = pipeline_cfg.get("lean") or {}
     syntax = (SyntaxChecker(runner, float(lean_cfg.get("syntax_timeout_s", 30)))
@@ -175,7 +229,10 @@ def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipel
                                 pipeline_cfg=pipeline_cfg, argv=sys.argv,
                                 extra={"spend": spend.info(), "flow": flow, **({"retriever": {"mode": retriever.mode,
                                                                                 "warnings": retriever.warnings}}
-                                                                 if retriever is not None else {}), **extra})
+                                                                 if retriever is not None else {}),
+                                       **({"check": {"attempts": int((pipeline_cfg.get("critic") or {}).get("k_max", 3)),
+                                                     "b_max": check_b_max, "retrieval": use_rag}} if args.check else {}),
+                                       **extra})
 
     write_run_config(run_dir, config(status="running", problems=[p["id"] for p in problems]))
     tracer.event("run_start", run_id=run_id, config=args.config, profile=profile, problems=len(problems),
@@ -206,6 +263,9 @@ def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipel
                                                     syntax=syntax)
                     else:
                         res = run_graph(p, client, runner, retriever, budget, tracer, pipeline_cfg, syntax=syntax)
+                    if args.check and res.get("status") != "budget_stop":
+                        res["check"] = run_check(p, res, client, runner, retriever, tracer, pipeline_cfg, syntax,
+                                                 check_b_max, use_rag)
                     row = {"problem_id": p["id"], "config": args.config, "profile": profile, "split": p.get("split"),
                            "area": p.get("area"), "difficulty": p.get("difficulty"), **res,
                            "llm": budget.summary(), "wall_s": round(time.perf_counter() - t0, 2)}
@@ -222,10 +282,13 @@ def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipel
                 rows.append(row)
                 if args.echo:
                     stage = f" stage={row['stage']}" if row.get("stage") else ""
+                    if "check" in row:
+                        stage += (f" check={row['check']['status']}"
+                                  + (f" check_calls={row['check']['llm']['llm_calls']}" if "llm" in row["check"] else ""))
                     print(f"{p['id']:<28} {row['status']:<17}{stage} calls={row['llm']['llm_calls']:<3} "
                           f"cost=${row['llm']['cost_usd']:.4f} length={row['llm']['length_finishes']} "
                           f"{row['wall_s']:.1f}s", flush=True)
-                if row["status"] == "budget_stop":
+                if row["status"] == "budget_stop" or (row.get("check") or {}).get("status") == "budget_stop":
                     tracer.event("run_budget_stop", level="error", problem_id=p["id"], reason=spend.stopped,
                                  not_run=len(problems) - len(rows))
                     break

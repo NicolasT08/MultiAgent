@@ -60,6 +60,11 @@ Rules the components enforce (CLAUDE.md §1):
   back-end loads, the run stops with status `lean_unavailable` (exit code 2) before any
   further LLM call, and the last problem's row is marked `lean_down`.
 - `run_eval.py` copies its console to `runs/<run>/console.log`.
+- C2 never verifies itself (`solved` is None). `run_baseline_b.py --check` (= `run_eval.py --config C2
+  --check`) measures FPR_B (Eq. 16): each claimed proof is the Autoformalizer's sketch on the trivial
+  plan, up to `critic.k_max` attempts with κ and the Critic's deterministic feedback, Retriever lemmas as
+  in C5, no pre-pass, its own `B_max` budget; only `accepted` on the assembled theorem counts
+  (`baselines/baseline_b.check_claim`).
 - Every LLM call goes through `llm/client.py` and counts for the problem's `b_max`.
 - κ and π are pure functions; the Critic's optional LLM advice runs after π has decided.
 

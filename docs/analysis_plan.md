@@ -136,4 +136,18 @@ implement exactly this plan; it is tested on `dev` runs before it reads any `tes
 
 ## Deviations
 
-(None yet.)
+No deviation yet. Clarifications written before any run on `test`:
+
+- **2026-11-03, FPR_B check (§4.2), how "the Autoformalizer–Verifier loop with the same budget" is
+  implemented** (`scripts/run_baseline_b.py --check`, `baselines/baseline_b.check_claim`): each claimed
+  proof (B⁺) is the sketch of the Autoformalizer on the trivial plan (the whole theorem as the only
+  subgoal), with the Retriever's lemmas as in C5; up to `critic.k_max` = 3 attempts, each failure
+  classified by κ and followed by the Critic's deterministic feedback (no LLM advice, no Planner, no
+  Generator, no automation pre-pass, so no fixed tactic can stand in for the claimed proof); its own
+  budget of `B_max` = 40 calls, counted apart from C2's own calls (C2's efficiency figures exclude the
+  check; in practice the check makes at most k_max × 2 = 6 calls: one Autoformalizer call and at most
+  one JSON repair per attempt). Acc is Eq. 2 on the assembled theorem. FPR_B = not_verified /
+  (verified + not_verified), where `budget_exhausted` counts as not_verified (the budget is part of the
+  method). A check that ended in `provider_error`, `budget_stop` or `error`, or a row marked `lean_down`,
+  is left out of FPR_B, counted apart and re-run once like a `provider_error` (§5); if it fails again
+  the same way it is reported as not checked. Problems C2 did not claim are not checked.

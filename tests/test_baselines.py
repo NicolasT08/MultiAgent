@@ -31,7 +31,7 @@ class FakeRunner:
         self.files.append((code, theorem))
         if "good" in code:
             return LeanResult("finished", "repl", axioms=["propext"], declarations=[theorem], theorem=theorem)
-        return LeanResult("finished", "repl", [LeanMessage("error", 5, 2, "linarith failed")], axioms=[],
+        return LeanResult("finished", "repl", [LeanMessage("error", 40, 2, "linarith failed")], axioms=[],
                           declarations=[theorem], theorem=theorem)
 
 
@@ -137,6 +137,99 @@ def test_c2_failures_never_raise(tmp_path):
     client, _, tracer = client_for(tmp_path / "c", SOL, json.dumps({"verdict": "correct"}))
     assert run_baseline_b(PROBLEM, client, Budget(1), tracer)["status"] == "budget_exhausted"
     assert run_baseline_b({"id": "q", "statement": "nope"}, client, Budget(4), tracer)["status"] == "invalid_statement"
+
+
+# -- C2 --check: FPR_B (Eq. 16) -------------------------------------------------
+
+
+class CheckRetriever:
+    def __init__(self):
+        self.queries: list[tuple[str, int | None]] = []
+
+    def retrieve(self, query, k=None):
+        from formal_mas.agents.contracts import LemmaHit
+        self.queries.append((query, k))
+        return [LemmaHit(name="sq_nonneg", signature="(a : α) : 0 ≤ a ^ 2", score=1.0)]
+
+    def suggest_names(self, ident, n=None):
+        return ["mul_pos"] if ident == "foo_bar" else []
+
+
+class MissingRunner(FakeRunner):
+    """Like FakeRunner, but a block without `good` cites an unknown name."""
+
+    def verify(self, code, theorem=None, timeout=None):
+        res = super().verify(code, theorem, timeout)
+        if "good" in code:
+            return res
+        return LeanResult("finished", "repl", [LeanMessage("error", 40, 4, "unknown identifier `foo_bar`")],
+                          axioms=[], declarations=[theorem], theorem=theorem)
+
+
+def autoformalizer_requests(transport):
+    return [r[1] for r in transport.calls if "natural-language proof sketch" in r[1]["messages"][0]["content"]]
+
+
+def test_check_claim_verifies_with_the_critic_feedback(tmp_path):
+    from formal_mas.baselines.baseline_b import check_claim
+    client, transport, tracer = client_for(tmp_path, tactics("linarith"), tactics("good"))
+    runner, budget, retr = FakeRunner(), Budget(40), CheckRetriever()
+    res = check_claim(PROBLEM, "Subtract 3 and divide by 2.", client, runner, retr, budget, tracer, attempts=3)
+    assert res["status"] == "verified" and res["accepted"] and budget.used == 2
+    assert [a["status"] for a in res["attempts"]] == ["failed", "ok"] and res["error_classes"] == ["tactic_failure"]
+    first, second = autoformalizer_requests(transport)
+    assert "Subtract 3 and divide by 2." in first["messages"][1]["content"]
+    assert f"({prompting.fragment('check_strategy')})" in first["messages"][1]["content"]
+    assert "linarith failed" in second["messages"][1]["content"]  # τ_prev of the Critic
+    # the lemma, then the assembled theorem (Eq. 2 on the whole file, built by the code)
+    assert [t for _, t in runner.files] == ["p_sg1", "p_sg1", "p"]
+    assert res["proof"] == runner.files[-1][0] and "theorem p (x : ℝ)" in res["proof"]
+    assert retr.queries[0][1] is None and len(retr.queries) == 2
+
+
+def test_check_claim_gives_up_after_k_max_attempts(tmp_path):
+    from formal_mas.baselines.baseline_b import check_claim
+    client, _, tracer = client_for(tmp_path, tactics("linarith"))
+    budget = Budget(40)
+    res = check_claim(PROBLEM, "s", client, FakeRunner(), None, budget, tracer, attempts=3, rag=False)
+    assert res["status"] == "not_verified" and not res["accepted"] and res["proof"] is None
+    assert len(res["attempts"]) == 3 and budget.used == 3
+    assert any(e["event"] == "claim_check_end" and e["status"] == "not_verified" for e in tracer.events)
+
+
+def test_check_claim_missing_lemma_expands_the_query(tmp_path):
+    from formal_mas.baselines.baseline_b import check_claim
+    client, transport, tracer = client_for(tmp_path, tactics("exact foo_bar"), tactics("good"))
+    retr = CheckRetriever()
+    res = check_claim(PROBLEM, "s", client, MissingRunner(), retr, Budget(40), tracer, attempts=3, k_retry=32)
+    assert res["status"] == "verified" and res["error_classes"] == ["missing_lemma"]
+    assert retr.queries[1][0].endswith(" foo_bar") and retr.queries[1][1] == 32
+    assert "mul_pos" in autoformalizer_requests(transport)[1]["messages"][1]["content"]
+
+
+def test_check_claim_stops_and_never_raises(tmp_path):
+    from formal_mas.baselines.baseline_b import check_claim
+    client, _, tracer = client_for(tmp_path, tactics("linarith"))
+    assert check_claim(PROBLEM, "s", client, FakeRunner(), None, Budget(1), tracer, attempts=3,
+                       rag=False)["status"] == "budget_exhausted"
+    client, _, tracer = client_for(tmp_path / "b", http_error(402))
+    assert check_claim(PROBLEM, "s", client, FakeRunner(), None, Budget(40), tracer, rag=False)["status"] == "provider_error"
+    assert check_claim({"id": "q", "statement": "nope"}, "s", client, FakeRunner(), None, Budget(40),
+                       tracer)["status"] == "invalid_statement"
+    client, _, tracer = client_for(tmp_path / "c", tactics("good"))
+    res = check_claim(PROBLEM, "s", client, FakeRunner(RuntimeError("REPL exploded")), None, Budget(40), tracer,
+                      rag=False)
+    assert res["status"] == "error" and not res["accepted"]
+
+
+def test_check_claim_rejects_sorry_and_never_uses_the_prepass(tmp_path):
+    from formal_mas.baselines.baseline_b import check_claim
+    client, _, tracer = client_for(tmp_path, tactics("sorry"))
+    runner = FakeRunner()
+    res = check_claim(PROBLEM, "s", client, runner, None, Budget(40), tracer, attempts=2, rag=False)
+    assert res["status"] == "not_verified" and res["error_classes"] == ["syntax", "syntax"]
+    assert runner.files == []  # rejected before Lean; no fixed tactic was ever compiled
+    assert not any(e["event"] == "prepass" for e in tracer.events)
 
 
 # -- prompts -------------------------------------------------------------------

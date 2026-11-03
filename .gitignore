@@ -32,3 +32,9 @@ data/llm_cache/
 
 # Ledger of real LLM spend (config/pipeline.yaml → spend.ledger)
 data/spend_ledger.jsonl
+CLAUDE.md
+PLAN.md
+.mcp.json
+.claude/
+chat.md
+src/manual_tests/

@@ -195,9 +195,15 @@ Baselines:
 - **Bound** (Proposition 1, Eq. 13): `C ≤ min{b_max, (r_max + 1)(1 + n_max · k_max · (N + 2))}`, tested with
   random LLM and Lean behaviour (`tests/test_graph.py`). A JSON repair call counts for `b_max` but is
   not in the structural term, so with repairs only `b_max` bounds the calls.
-- **Configurations** (`config/ablations/`): C1 `flow: baseline_a`, `b_max: 10` (C5's mean calls per problem on dev); C2 `flow: baseline_b`; C3
+- **Configurations** (`config/ablations/`): C1 `flow: baseline_a`, `b_max: 18` (C5's mean calls per problem on the
+  15 dev problems, final configuration); C2 `flow: baseline_b`; C3
   `retrieval.enabled: false` (no lemmas, no name suggestions), Critic advice on; C4 `k_max: 1, r_max: 0`;
   C5 the full system, Critic advice on.
+- **FPR_B** (Eq. 16): `python scripts/run_baseline_b.py --split dev --check` runs C2 and formalizes every
+  proof it claims (trivial plan, the claimed proof as the Autoformalizer's sketch, `k_max` attempts with the
+  Critic's deterministic feedback, no pre-pass; its own budget, apart from C2's calls, at most `k_max` × 2 = 6
+  calls per claim); FPR_B = claims Lean did not accept / claims checked. Lean start-up is checked with probes (`pipeline.yaml → lean.probes`); without Mathlib a
+  run stops before any LLM call (`lean_unavailable`).
 
 ---
 

@@ -17,4 +17,6 @@ no_sketch: (no sketch)
 no_lemma_names: (none)
 no_informal: (none)
 no_strategy: none
+check_strategy: the claimed natural-language proof
+final_answer: \n\nFinal answer: {answer}
 closing_step: Closing step (Lean, already checked):\n```lean\n{closing}\n```
