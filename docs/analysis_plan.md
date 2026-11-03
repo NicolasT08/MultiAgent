@@ -156,7 +156,8 @@ No deviation from the analysis itself. Infrastructure incidents during the `test
      cap (`--run-usd 0.50`) during the third problem. `imo_1987_p6` and `imo_1979_p1` finished
      (both `failed`). `imo_1984_p6` got a `budget_stop` row after 19 calls, and the last 4 were
      not attempted.
-  2. `…_C5_experiment_resume2` (commit noted in its `run_config.json`) ran `imo_1984_p6` from scratch,
+  2. `20261103T225140Z_C5_experiment_resume2` (commit `93bc701`, which changes only this file; clean
+     tree; input sha256 `f3da0f6d…6d77f91`) ran `imo_1984_p6` from scratch,
      plus the 4 problems not attempted, with `--run-usd 1.00` (the cap raised by team decision, §5).
      The requests that `imo_1984_p6` repeats from step 1 are answered from the cache.
   **Merge:** the C5 result on `test` has one row per problem (30 in all), taken from the run where
