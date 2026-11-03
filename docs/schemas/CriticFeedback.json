@@ -1,0 +1,15 @@
+{
+  "description": "Optional LLM output of the Critic: advice for the next attempt, text only.",
+  "properties": {
+    "feedback": {
+      "description": "At most three sentences of advice for the next attempt",
+      "title": "Feedback",
+      "type": "string"
+    }
+  },
+  "required": [
+    "feedback"
+  ],
+  "title": "CriticFeedback",
+  "type": "object"
+}

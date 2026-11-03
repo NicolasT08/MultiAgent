@@ -1,0 +1,27 @@
+{
+  "description": "One Mathlib lemma returned by the Retriever for a subgoal.",
+  "properties": {
+    "name": {
+      "description": "Fully qualified Lean name, ready to paste into a proof",
+      "title": "Name",
+      "type": "string"
+    },
+    "signature": {
+      "description": "Binders and type, without the proof",
+      "title": "Signature",
+      "type": "string"
+    },
+    "score": {
+      "description": "Ranking score (RRF score, or BM25 score in lexical-only mode)",
+      "title": "Score",
+      "type": "number"
+    }
+  },
+  "required": [
+    "name",
+    "signature",
+    "score"
+  ],
+  "title": "LemmaHit",
+  "type": "object"
+}

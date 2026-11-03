@@ -1,0 +1,12 @@
+{
+ "backend": "repl",
+ "repl_tag": "v4.36.0-rc1",
+ "repl_commit": "a85a1d2f4bdeab19c3d34be979ea336c9ee9b3ed",
+ "repl_modified": false,
+ "repl_toolchain": "leanprover/lean4:v4.36.0-rc1",
+ "degraded": false,
+ "file_verifications": 0,
+ "file_import_s": {},
+ "repl_starts": 1,
+ "cache_hits": 0
+}

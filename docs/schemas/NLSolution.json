@@ -1,0 +1,21 @@
+{
+  "description": "Baseline B (C2): a natural-language proof, never verified.",
+  "properties": {
+    "solution": {
+      "description": "Complete step-by-step proof in natural language",
+      "title": "Solution",
+      "type": "string"
+    },
+    "final_answer": {
+      "default": "",
+      "description": "Final answer or claim in one line",
+      "title": "Final Answer",
+      "type": "string"
+    }
+  },
+  "required": [
+    "solution"
+  ],
+  "title": "NLSolution",
+  "type": "object"
+}

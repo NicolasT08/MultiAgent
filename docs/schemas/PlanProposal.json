@@ -1,0 +1,30 @@
+{
+  "description": "LLM output of the Planner: subgoal propositions and the closing tactic block.",
+  "properties": {
+    "subgoals": {
+      "description": "Lean 4 propositions over the theorem's variables, one line each, proved in order; subgoal i becomes hypothesis h<i>",
+      "items": {
+        "type": "string"
+      },
+      "title": "Subgoals",
+      "type": "array"
+    },
+    "closing": {
+      "description": "Tactic block that proves the theorem's goal from the subgoal hypotheses",
+      "title": "Closing",
+      "type": "string"
+    },
+    "rationale": {
+      "default": "",
+      "description": "Why these subgoals, in one or two sentences",
+      "title": "Rationale",
+      "type": "string"
+    }
+  },
+  "required": [
+    "subgoals",
+    "closing"
+  ],
+  "title": "PlanProposal",
+  "type": "object"
+}

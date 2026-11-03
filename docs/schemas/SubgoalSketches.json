@@ -1,0 +1,145 @@
+{
+  "$defs": {
+    "Sketch": {
+      "properties": {
+        "strategy": {
+          "description": "Main strategy, one label of the fixed list",
+          "enum": [
+            "induction",
+            "case_analysis",
+            "algebraic_manipulation",
+            "classical_inequality",
+            "modular_arithmetic",
+            "contradiction",
+            "direct_computation",
+            "other"
+          ],
+          "title": "Strategy",
+          "type": "string"
+        },
+        "sketch": {
+          "description": "Numbered natural-language proof steps of the subgoal",
+          "title": "Sketch",
+          "type": "string"
+        },
+        "lemmas": {
+          "description": "Names of the listed Mathlib lemmas the sketch uses",
+          "items": {
+            "type": "string"
+          },
+          "title": "Lemmas",
+          "type": "array"
+        },
+        "sample": {
+          "description": "Self-consistency sample index (0-based)",
+          "title": "Sample",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "strategy",
+        "sketch",
+        "sample"
+      ],
+      "title": "Sketch",
+      "type": "object"
+    }
+  },
+  "description": "Generator output for one subgoal: the samples, the vote and the chosen sketch.",
+  "properties": {
+    "index": {
+      "description": "1-based subgoal index",
+      "title": "Index",
+      "type": "integer"
+    },
+    "subgoal": {
+      "title": "Subgoal",
+      "type": "string"
+    },
+    "lemmas": {
+      "description": "Retrieved lemma names given to the model",
+      "items": {
+        "type": "string"
+      },
+      "title": "Lemmas",
+      "type": "array"
+    },
+    "samples": {
+      "items": {
+        "$ref": "#/$defs/Sketch"
+      },
+      "title": "Samples",
+      "type": "array"
+    },
+    "failures": {
+      "description": "Samples without a valid sketch, with the reason",
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Failures",
+      "type": "array"
+    },
+    "votes": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Votes",
+      "type": "object"
+    },
+    "strategy": {
+      "anyOf": [
+        {
+          "enum": [
+            "induction",
+            "case_analysis",
+            "algebraic_manipulation",
+            "classical_inequality",
+            "modular_arithmetic",
+            "contradiction",
+            "direct_computation",
+            "other"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Winning strategy (Eq. 9)",
+      "title": "Strategy"
+    },
+    "representative": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Sketch"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Lowest-index sample of the winning strategy"
+    },
+    "status": {
+      "default": "ok",
+      "enum": [
+        "ok",
+        "no_sketch",
+        "budget_exhausted",
+        "budget_stop",
+        "provider_error",
+        "error"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "index",
+    "subgoal"
+  ],
+  "title": "SubgoalSketches",
+  "type": "object"
+}

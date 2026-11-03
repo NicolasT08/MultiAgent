@@ -15,6 +15,7 @@ lean_repl/
 
 # Generated data and run outputs
 data/index/
+data/raw/
 runs/
 
 # Local Claude Code settings

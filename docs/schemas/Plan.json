@@ -1,0 +1,78 @@
+{
+  "description": "Planner node output. The trivial plan is the whole goal as the only subgoal; a direct\nplan has no subgoals and its closing block alone is an accepted proof of the theorem.",
+  "properties": {
+    "subgoals": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Subgoals",
+      "type": "array"
+    },
+    "closing": {
+      "title": "Closing",
+      "type": "string"
+    },
+    "hypotheses": {
+      "description": "Names the subgoals get in the skeleton (h1, h2, …)",
+      "items": {
+        "type": "string"
+      },
+      "title": "Hypotheses",
+      "type": "array"
+    },
+    "rationale": {
+      "default": "",
+      "title": "Rationale",
+      "type": "string"
+    },
+    "source": {
+      "enum": [
+        "llm",
+        "trivial",
+        "direct"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "closing_source": {
+      "default": "llm",
+      "description": "`llm`, or `auto:<tactic>` when the model's closing failed and a tactic of planner.closing_auto closed the goal",
+      "title": "Closing Source",
+      "type": "string"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Why the trivial plan was used (e.g. `refuted:sg2`), or `closing_auto:<tactic>` for a repaired closing",
+      "title": "Reason"
+    },
+    "skeleton_compiles": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Skeleton compiles (sorry allowed) and the closing lemma is accepted (direct plan: the proof is accepted); None if not compiled",
+      "title": "Skeleton Compiles"
+    }
+  },
+  "required": [
+    "subgoals",
+    "closing",
+    "hypotheses",
+    "source"
+  ],
+  "title": "Plan",
+  "type": "object"
+}

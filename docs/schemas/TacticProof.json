@@ -1,0 +1,15 @@
+{
+  "description": "Baseline A (C1) and, later, the Autoformalizer: only the tactic block after `:= by`.",
+  "properties": {
+    "tactics": {
+      "description": "Lean 4 tactic block, one tactic per line; never a statement",
+      "title": "Tactics",
+      "type": "string"
+    }
+  },
+  "required": [
+    "tactics"
+  ],
+  "title": "TacticProof",
+  "type": "object"
+}

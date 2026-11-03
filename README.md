@@ -271,6 +271,9 @@ formal-mas/
 ├── data/
 │   ├── smoke.jsonl              # 5 trivial hand-written problems for smoke runs
 │   ├── dev_preview.jsonl        # 5 medium miniF2F problems for Planner/Generator previews (dev only)
+│   ├── eval.jsonl               # evaluation set: 45 problems, 15 dev / 30 test (see data/README.md)
+│   ├── curation/                # selection criteria, discarded problems, fidelity review
+│   ├── raw/                     # pinned sources of eval.jsonl (not in git)
 │   ├── retrieval_eval/          # Q (q_dev.jsonl, q_test.jsonl) and evaluation results
 │   ├── index/                   # generated corpus and indexes (not in git)
 │   └── llm_cache/               # LLM response cache (not in git)

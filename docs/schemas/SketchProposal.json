@@ -1,0 +1,39 @@
+{
+  "description": "LLM output of the Generator: one proof sketch of one subgoal.",
+  "properties": {
+    "strategy": {
+      "description": "Main strategy, one label of the fixed list",
+      "enum": [
+        "induction",
+        "case_analysis",
+        "algebraic_manipulation",
+        "classical_inequality",
+        "modular_arithmetic",
+        "contradiction",
+        "direct_computation",
+        "other"
+      ],
+      "title": "Strategy",
+      "type": "string"
+    },
+    "sketch": {
+      "description": "Numbered natural-language proof steps of the subgoal",
+      "title": "Sketch",
+      "type": "string"
+    },
+    "lemmas": {
+      "description": "Names of the listed Mathlib lemmas the sketch uses",
+      "items": {
+        "type": "string"
+      },
+      "title": "Lemmas",
+      "type": "array"
+    }
+  },
+  "required": [
+    "strategy",
+    "sketch"
+  ],
+  "title": "SketchProposal",
+  "type": "object"
+}

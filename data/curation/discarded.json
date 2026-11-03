@@ -1,0 +1,23 @@
+[
+ {
+  "id": "amc12a_2019_p21",
+  "difficulty": "medium",
+  "area": "algebra",
+  "stage": "compile_with_sorry",
+  "reason": "does not compile with sorry (finished): Application type mismatch: The argument\n  ℤ ∈ Finset.Icc 1 12\nhas type\n  Prop\nof sort `Type` but is expected to have type\n  Type ?u.21\nof sort `Type (?u.21 + 1)` in the application\n  Finset (ℤ ∈ Finset.Icc 1 12) | failed to synthesize instance of type class\n  OfNat Type 1\nnumerals are polymorphic in"
+ },
+ {
+  "id": "imo_1962_p2",
+  "difficulty": "hard",
+  "area": "algebra",
+  "stage": "fidelity_review",
+  "reason": "Proves a different inequality: the informal text has an outer root (inner difference > 1/4, bound 1 - sqrt(127)/32) while the formal statement has inner difference > 1/2, bound 1 - sqrt(31)/8. At x = 1/2 the informal inequality holds and the formal hypothesis fails (checked in Lean)."
+ },
+ {
+  "id": "imo_1974_p5",
+  "difficulty": "hard",
+  "area": "algebra",
+  "stage": "fidelity_review",
+  "reason": "\"Determine all possible values\" is stated only as 1 < s < 2: attainment of every value in (1, 2), half of the answer, is missing, so the formal statement is essentially weaker."
+ }
+]

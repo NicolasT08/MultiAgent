@@ -1,0 +1,122 @@
+{
+  "description": "One pass through the CRITIQUE state: the class, the action and the counters of Eq. 12.",
+  "properties": {
+    "subgoal": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "1-based subgoal; None for a plan-level failure",
+      "title": "Subgoal"
+    },
+    "reason": {
+      "description": "Why it failed (e.g. `lean:error`, `sanitize:sorry`, `refuted:sg2`)",
+      "title": "Reason",
+      "type": "string"
+    },
+    "error_class": {
+      "enum": [
+        "syntax",
+        "missing_lemma",
+        "tactic_failure",
+        "misformalization",
+        "timeout",
+        "planning"
+      ],
+      "title": "Error Class",
+      "type": "string"
+    },
+    "message_class": {
+      "description": "κ on this trace alone, before Eq. 11's k_max-strategies rule",
+      "enum": [
+        "syntax",
+        "missing_lemma",
+        "tactic_failure",
+        "misformalization",
+        "timeout",
+        "planning"
+      ],
+      "title": "Message Class",
+      "type": "string"
+    },
+    "action": {
+      "enum": [
+        "abandon",
+        "replan",
+        "retry"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "route": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Next state: FORMALIZE, RETRIEVE or GENERATE on a retry",
+      "title": "Route"
+    },
+    "attempts": {
+      "description": "a_i, attempts spent on the subgoal",
+      "title": "Attempts",
+      "type": "integer"
+    },
+    "replans": {
+      "description": "r, replans performed before this decision",
+      "title": "Replans",
+      "type": "integer"
+    },
+    "calls": {
+      "description": "b, LLM calls consumed",
+      "title": "Calls",
+      "type": "integer"
+    },
+    "missing_identifier": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Missing Identifier"
+    },
+    "suggestions": {
+      "description": "Real names close to the missing identifier",
+      "items": {
+        "type": "string"
+      },
+      "title": "Suggestions",
+      "type": "array"
+    },
+    "llm_feedback": {
+      "default": false,
+      "description": "Whether the optional LLM advice was added",
+      "title": "Llm Feedback",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "reason",
+    "error_class",
+    "message_class",
+    "action",
+    "attempts",
+    "replans",
+    "calls"
+  ],
+  "title": "Critique",
+  "type": "object"
+}

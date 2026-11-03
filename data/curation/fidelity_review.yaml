@@ -1,0 +1,24 @@
+# Informal-to-formal fidelity review of data/eval.jsonl (2026-11-01, subagent lean-expert).
+# Never based on system results. Scope: all problems drawn, including the three replacements.
+# Problems not listed under `notes` were kept with no remark.
+rule: >-
+  Discard if the formal statement changes the mathematics: false, contradictory hypotheses, a
+  different claim, or an essential part of the answer lost ("determine" reduced to a bound).
+discarded: [imo_1962_p2, imo_1974_p5]  # reasons in criteria.yaml
+notes:
+  mathd_algebra_455: "The sequence is already reduced to 2*(2*(2*(2*x)))=48; same mathematics."
+  mathd_algebra_234: "Reduced to third term times d^3; the redundant second ratio is omitted."
+  amc12b_2003_p6: >-
+    States u 0 = +-2/sqrt 3 for every valid sequence, without saying -2*sqrt(3)/3 is attained. Kept: the
+    conclusion determines the answer among the options (+2/sqrt 3 is not one), and the omitted part is a
+    single witness. Both disjuncts are attained (proved in Lean), so the statement is not vacuous.
+  imo_2006_p3: "Matches the informal text of this record, which states only the bound."
+  imo_1987_p6: >-
+    No n >= 2 hypothesis and a duplicate h0 binder. Harmless: the hypothesis is unsatisfiable for
+    p < 2 (proved in Lean), so the truncated p - 2 does not matter.
+  putnam_1995_b1: "Uses Exists.choose and relabels {1..9} as range 9; the chosen part is unique (proved in Lean)."
+  putnam_1965_b2: "Losses defined as n - 1 - w r, computed in the integers, not counted."
+verification_limits: >-
+  Most truth checks are finite (Python) or by reading; the review establishes that statements match
+  the informal text, not that they are theorems. imo_2006_p3 and putnam_1995_b1 were checked only for
+  the match. mathd_numbertheory_232 rests on hand arithmetic: `decide` could not reduce the ZMod goal.
