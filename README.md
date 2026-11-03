@@ -300,7 +300,7 @@ Tested on Windows 11 (Git Bash) with Python 3.12; the scripts also work on Linux
 ### 3.1 Requirements
 
 - Python ≥ 3.10 (the project uses 3.12 in `.venv/`)
-- [uv](https://docs.astral.sh/uv/) (needed by the `lean-lsp` MCP server)
+- [uv](https://docs.astral.sh/uv/) (creates the Python environment, §3.2)
 - Git and `curl`
 - ~7 GB of disk for Lean 4 + Mathlib, plus ~3 GB for the indexes
 
@@ -551,4 +551,3 @@ them with `python scripts/capture_lean_fixtures.py` when the Lean version change
   model id: `deepseek-flash` is an alias (it has already moved from V4-Flash to
   V4.1-Flash), and the API echoes the alias as `model`, so the `system_fingerprint` of
   every response (recorded with `model`) is the only per-call trace of the underlying model.
-- Every decision taken during Phase 1, with its evidence, is logged in `PLAN.md`.
