@@ -441,6 +441,11 @@ def test_run_eval_pg_preview(tmp_path, monkeypatch, capsys):
         def start(self):
             return True
 
+        def ensure_available(self):
+            return True
+
+        available = True
+
         def close(self):
             pass
 

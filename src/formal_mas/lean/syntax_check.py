@@ -43,6 +43,10 @@ STRUCTURAL = frozenset({
     "Lean.modCast", "Mathlib.Meta.setBuilder", "Batteries.ExtendedBinder.extBinder",
     "Batteries.ExtendedBinder.extBinders", "BigOperators.bigsum", "BigOperators.bigprod",
     "BigOperators.bigOpBinder", "BigOperators.bigOpBinders",
+    # `⊆ ⊂ ⊇ ⊃` (Mathlib/Tactic/SetNotationForOrder.lean overrides the core notation with these
+    # kinds); missing from the first whitelist, found in the C5 dev run of 2026-11-03
+    "Mathlib.Meta.SetNotationForOrder.subsetStx'", "Mathlib.Meta.SetNotationForOrder.ssubsetStx'",
+    "Mathlib.Meta.SetNotationForOrder.supsetStx'", "Mathlib.Meta.SetNotationForOrder.ssupsetStx'",
 })
 
 TACTICS = frozenset({
@@ -91,7 +95,9 @@ TACTICS = frozenset({
     "Mathlib.Tactic.Qify.qify", "Mathlib.Tactic.Rify.rify",
     # hypotheses and goals
     "Lean.Parser.Tactic.tacticHave__", "Lean.Parser.Tactic.tacticHave_", "Lean.Parser.Tactic.tacticLet__",
-    "Mathlib.Linter.HaveILetI.tacticHaveI__", "Lean.Parser.Tactic.tacticSuffices_", "Lean.Parser.Tactic.specialize",
+    "Mathlib.Linter.HaveILetI.tacticHaveI__", "Mathlib.Linter.HaveILetI.tacticLetI__",
+    "Lean.Parser.Tactic.classical",  # letI, classical: C5 dev run 2026-11-03 (only add instances)
+    "Lean.Parser.Tactic.tacticSuffices_", "Lean.Parser.Tactic.specialize",
     "Lean.Parser.Tactic.generalize", "Lean.Parser.Tactic.generalizeArg", "Mathlib.Tactic.setTactic",
     "Mathlib.Tactic.setArgsRest", "Lean.Parser.Tactic.change", "Lean.Parser.Tactic.clear", "Lean.Parser.Tactic.revert",
     "Lean.Parser.Tactic.renameI", "Lean.Parser.Tactic.subst", "Lean.Parser.Tactic.substVars",

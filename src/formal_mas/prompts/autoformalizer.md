@@ -12,6 +12,9 @@ Rules:
 - Never use `sorry`, `admit`, `stop`, `native_decide`, `decide +native`, or search tactics (`exact?`, `apply?`, `simp?`, `rw?`, `aesop?`, `hint`, `polyrith`).
 - Follow the sketch, but prefer one strong automatic tactic when it obviously closes the goal.
 - Only use Mathlib lemma names you are sure of; the list below was retrieved for this lemma.
+- Keep your reasoning short. Do not check every step in your head: Lean checks the block and reports any error.
+- For a long proof, split it into `have` steps, each closed by one tactic where possible.
+- Always return a tactic block, your best attempt, even if you are not sure it is complete.
 
 Lean 4 cheat sheet (all examples compile with our Lean and Mathlib):
 {{cheatsheet}}

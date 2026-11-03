@@ -105,3 +105,22 @@ def test_closing_candidates(runner):
     thm = parse_theorem("theorem s (a b : ℝ) (h₀ : a + b = 5) (h₁ : a - b = 1) : a + 2 * b = 7 := by sorry")
     code, ranges = closing_candidates_file(thm, ["a = 3", "b = 2"], ["omega", "linarith", "nlinarith"], 200000)
     assert _proved(runner, thm, code, ranges) == {"close_auto2", "close_auto3"}  # omega: not over ℝ
+
+
+def test_probes_pass_on_the_real_repl_and_a_missing_name_is_caught(runner):
+    # the module fixture started a REPL whose probes (Real.sqrt, Aesop.BuiltinRules.not_intro) answered
+    assert runner.starts >= 1 and not any(w["reason"] == "repl_probe_failed" for w in runner.warnings)
+    assert runner.ensure_available() and runner.available
+    # a probe name that does not exist stands in for "the import did not bring Mathlib": the REPL is
+    # tried twice, then the file back-end runs the same probe and fails too → Lean unavailable
+    from formal_mas.config import load_pipeline
+    lean = {**load_pipeline()["lean"], "probes": {"Mathlib": "Real.no_such_constant_formal_mas"}}
+    broken = LeanRunner({"lean": lean})
+    try:
+        assert broken.ensure_available() is False and broken.available is False
+        reasons = [w["reason"] for w in broken.warnings]
+        assert reasons == ["repl_probe_failed", "repl_probe_failed", "file_import_failed"], broken.warnings
+        assert "Real.no_such_constant_formal_mas" in broken.warnings[0]["detail"]
+        assert broken.verify(GOOD, theorem="t").status == "crash"  # never accepts anything
+    finally:
+        broken.close()

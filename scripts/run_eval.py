@@ -11,13 +11,18 @@ only (plans and sketches, no proof), one shared budget per problem:
     MODEL_PROFILE=dev python scripts/run_eval.py --config PG --data data/dev_preview.jsonl --echo
 
 Outputs: run_config.json (RNF-2, rewritten at the end), trace.jsonl (RNF-5), results.jsonl
-(one line per problem). The profile comes from MODEL_PROFILE (models.yaml → default_profile).
+(one line per problem), console.log (a copy of everything printed, CLI only). The profile comes from MODEL_PROFILE (models.yaml → default_profile).
 Paid profiles need the team's explicit permission (CLAUDE.md §2).
 
 Spend (llm/spend.py, pipeline.yaml → spend): prints the project's spend so far and what is
 left before the first problem, and the run's cost at the end. When a paid call could pass
 spend.total_usd or spend.run_usd the problem is `budget_stop` and the run stops there
 (run_config.json status `budget_stop`); the remaining problems are not run.
+
+Lean (lean/runner.py): before the first problem the runner must load the base imports and answer
+its probes, in the REPL or with the file back-end. If neither works, no problem is run and no LLM
+call is made (status `lean_unavailable`, exit code 2); the same stop happens between problems if
+both back-ends give up during the run.
 """
 
 from __future__ import annotations
@@ -96,8 +101,9 @@ def spend_line(info: dict) -> str:
 
 def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipeline_cfg: dict | None = None,
          client_kwargs: dict | None = None, runner_factory=LeanRunner, retriever_factory=Retriever,
-         runs_dir: Path | None = None) -> int:
-    """Keyword arguments are for offline tests (fake transport, clock and Lean; temporary folders)."""
+         runs_dir: Path | None = None, on_run_dir=None) -> int:
+    """Keyword arguments are for offline tests (fake transport, clock and Lean; temporary folders);
+    `on_run_dir(run_dir)` is called once the folder exists (the CLI copies the console there)."""
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--config", required=True, choices=sorted(CONFIGS))
     ap.add_argument("--data", type=Path, default=ROOT / "data" / "eval.jsonl")
@@ -132,6 +138,8 @@ def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipel
     run_id = f"{started:%Y%m%dT%H%M%SZ}_{args.config}_{profile}" + (f"_{args.run_name}" if args.run_name else "")
     run_dir = (runs_dir or ROOT / "runs") / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
+    if on_run_dir is not None:
+        on_run_dir(run_dir)
     console = logging.StreamHandler(sys.stderr)  # warnings only; INFO events go to the trace
     console.setLevel(logging.WARNING)
     console.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
@@ -173,11 +181,22 @@ def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipel
     tracer.event("run_start", run_id=run_id, config=args.config, profile=profile, problems=len(problems),
                  b_max=b_max, attempts=attempts, seed=seed, spend=spend.info())
     rows = []
+    lean_down = None  # set when Lean cannot check anything: the run stops (no LLM call is made)
     try:
-        if runner:
-            runner.start()  # import Mathlib once (~33 s warm, ~22 min cold on the HDD)
+        # import Mathlib once (~33 s warm, ~22 min cold on the HDD) and check it really loaded
+        # (runner probes); if neither the REPL nor the file back-end passes, nothing is run
+        if runner and not runner.ensure_available():
+            lean_down = "before the first problem"
+            tracer.event("run_lean_unavailable", level="error", when=lean_down, warnings=runner.warnings[-5:],
+                         not_run=len(problems))
+            LOG.error("Lean is not available (neither the REPL nor `lake env lean` loaded %s with the probes); "
+                      "no problem was run and no LLM call was made. See lean_runner_warning in %s",
+                      "+".join(runner.base_imports), run_dir / "trace.jsonl")
+            problems_to_run = []
+        else:
+            problems_to_run = problems
         with (run_dir / "results.jsonl").open("a", encoding="utf-8") as results:
-            for p in problems:
+            for p in problems_to_run:
                 with tracer.context(problem_id=p["id"]):
                     budget = Budget(b_max)
                     t0 = time.perf_counter()
@@ -190,8 +209,14 @@ def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipel
                     row = {"problem_id": p["id"], "config": args.config, "profile": profile, "split": p.get("split"),
                            "area": p.get("area"), "difficulty": p.get("difficulty"), **res,
                            "llm": budget.summary(), "wall_s": round(time.perf_counter() - t0, 2)}
+                    # Lean still usable after this problem? (instant if the REPL is alive; restarts it
+                    # with the probes otherwise). If not, this row is marked: its failures may be Lean's.
+                    lean_lost = runner is not None and not runner.ensure_available()
+                    if lean_lost:
+                        row["lean_down"] = True
                     tracer.event("problem_end", status=row["status"], solved=row.get("solved"),
-                                 claimed_solved=row.get("claimed_solved"), llm=row["llm"], wall_s=row["wall_s"])
+                                 claimed_solved=row.get("claimed_solved"), llm=row["llm"], wall_s=row["wall_s"],
+                                 **({"lean_down": True} if lean_lost else {}))
                 results.write(json.dumps(row, ensure_ascii=False) + "\n")
                 results.flush()
                 rows.append(row)
@@ -204,11 +229,20 @@ def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipel
                     tracer.event("run_budget_stop", level="error", problem_id=p["id"], reason=spend.stopped,
                                  not_run=len(problems) - len(rows))
                     break
+                if lean_lost:  # neither back-end loads Mathlib any more: stop before more LLM calls
+                    lean_down = f"after {p['id']}"
+                    tracer.event("run_lean_unavailable", level="error", when=lean_down,
+                                 warnings=runner.warnings[-5:], not_run=len(problems) - len(rows))
+                    LOG.error("Lean became unavailable after %s; the remaining %d problems were not run",
+                              p["id"], len(problems) - len(rows))
+                    break
     finally:
         summary = summarize(rows)
         summary["spend"] = spend.info()
         tracer.event("run_end", **summary)
-        if spend.stopped:
+        if lean_down:
+            status = "lean_unavailable"
+        elif spend.stopped:
             status = "budget_stop"
         else:
             status = "finished" if len(rows) == len(problems) else "interrupted"
@@ -224,8 +258,32 @@ def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipel
         print(spend_line(info), flush=True)
     shown = run_dir.relative_to(ROOT) if run_dir.is_relative_to(ROOT) else run_dir
     print(json.dumps({"run_dir": shown.as_posix(), "status": status, **summary}, ensure_ascii=False))
-    return 0
+    return 2 if lean_down else 0
+
+
+class _Tee:
+    """Writes to the console and to runs/<run>/console.log (long runs are not piped through `tail`)."""
+
+    def __init__(self, stream, log):
+        self.stream, self.log = stream, log
+
+    def write(self, text: str) -> int:
+        self.log.write(text)
+        self.log.flush()
+        return self.stream.write(text)
+
+    def flush(self) -> None:
+        self.stream.flush()
+        self.log.flush()
+
+    def __getattr__(self, name):
+        return getattr(self.stream, name)
+
+
+def copy_console(run_dir: Path) -> None:
+    log = (run_dir / "console.log").open("a", encoding="utf-8")
+    sys.stdout, sys.stderr = _Tee(sys.stdout, log), _Tee(sys.stderr, log)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(on_run_dir=copy_console))

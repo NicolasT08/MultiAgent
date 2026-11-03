@@ -12,7 +12,10 @@ notes:
     States u 0 = +-2/sqrt 3 for every valid sequence, without saying -2*sqrt(3)/3 is attained. Kept: the
     conclusion determines the answer among the options (+2/sqrt 3 is not one), and the omitted part is a
     single witness. Both disjuncts are attained (proved in Lean), so the statement is not vacuous.
-  imo_2006_p3: "Matches the informal text of this record, which states only the bound."
+  imo_2006_p3: >-
+    Matches the informal text of this record, which states only the bound. The one-sided form is
+    equivalent to the |.| form (swapping a, b negates the left side). Omits the minimality of
+    M = 9*sqrt(2)/32, so it is weaker than the full IMO 2006 P3 (re-checked 2026-11-03, lean-expert).
   imo_1987_p6: >-
     No n >= 2 hypothesis and a duplicate h0 binder. Harmless: the hypothesis is unsatisfiable for
     p < 2 (proved in Lean), so the truncated p - 2 does not matter.

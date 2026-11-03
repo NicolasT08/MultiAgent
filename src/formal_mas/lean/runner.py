@@ -26,6 +26,12 @@ Failure handling (REPL), never raising to the caller:
 A killed REPL is started again automatically before the next verification; if it cannot
 start, the runner switches to the file back-end for the rest of its life.
 
+Start-up check (2026-11-03): after `import <base>` the REPL must also answer `#check @<probe>`
+for every base import (`lean.probes`: `Real.sqrt` for Mathlib, `Aesop.BuiltinRules.not_intro`
+for Aesop) with no error, at start and at every restart; otherwise it is restarted once, then
+the file back-end is used, whose import measurement runs the same probes. `ensure_available()`
+is False when neither back-end passes: run_eval stops before any LLM call.
+
 Message positions are those of the full file: the import lines are blanked (not removed)
 before the code is sent to the REPL.
 
@@ -77,6 +83,12 @@ DEFAULTS = {
     "kill_memory_mb": 12000.0,
     "memory_poll_s": 0.5,
     "cache_size": 4096,
+    # One declaration per base import, `#check`ed right after the import (REPL start, every
+    # restart, and the file back-end's import measurement). Added 2026-11-03: a REPL answered
+    # `import Mathlib` with an env and no error, yet without Mathlib (10.7 s, 518 MB;
+    # runs/20261103T143337Z_C5_dev_precheck_r1: `unknown namespace BigOperators`).
+    # A module maps to one name or a list (pipeline.yaml → lean.probes overrides this).
+    "probes": {"Mathlib": ["Real.sqrt", "Finset.sum_range_succ"], "Aesop": "Aesop.BuiltinRules.not_intro"},
 }
 DECLS_MARKER = "FORMAL_MAS_DECLS "
 # Lists the constants added after the imports (`map₂`): the theorem plus whatever else the
@@ -220,6 +232,28 @@ def parse_json_lines(stdout: str, axioms_line: int | None = None, decls_line: in
             continue
         messages.append(_message(raw))
     return split_checks(messages, axioms_line, decls_line, theorem)
+
+
+def probe_lines(imports: list[str], probes: dict[str, str], first_line: int = 1) -> tuple[str, dict[int, str]]:
+    """`#check @<name>` for the probe of every import that has one → (text, line → name)."""
+    names = [n for m in imports if m in probes
+             for n in ([probes[m]] if isinstance(probes[m], str) else list(probes[m]))]
+    return "".join(f"#check @{n}\n" for n in names), {first_line + i: n for i, n in enumerate(names)}
+
+
+def probe_ok(messages: list[LeanMessage], lines: dict[int, str], required: str | None,
+             probes: dict[str, str]) -> tuple[bool, str]:
+    """The imports are loaded iff nothing is an error, every probe line answers `<name> : …`
+    (or `@<name> : …`) and, if `required` is given (the primary base import), it has a probe."""
+    if required is not None and required not in probes:
+        return False, f"no probe configured for {required!r} (lean.probes)"
+    if errors := [m for m in messages if m.severity == "error"]:
+        return False, f"line {errors[0].line}: {errors[0].text[:300]}"
+    for line, name in lines.items():
+        if not any(m.severity == "info" and m.line == line and re.match(rf"@?{re.escape(name)} :", m.text)
+                   for m in messages):
+            return False, f"no answer for `#check @{name}` (line {line})"
+    return True, ""
 
 
 def extra_declarations(declarations: list[str], theorem: str) -> list[str]:
@@ -384,6 +418,7 @@ class ReplProcess:
         self.kill_memory_mb = kill_memory_mb
         self.memory_poll_s = memory_poll_s
         self.commands = 0
+        self.start_commands = 0  # import + probe, set once the REPL is accepted
         self.children: list = []  # recorded after start-up (the repl under `lake env`)
         self.stderr_tail: deque[str] = deque(maxlen=50)
         self._replies: queue.Queue[str | None] = queue.Queue()
@@ -474,6 +509,7 @@ class LeanRunner:
         self.kill_memory_mb = float(cfg["kill_memory_mb"])
         self.memory_poll_s = float(cfg["memory_poll_s"])
         self.cache_size = int(cfg["cache_size"])
+        self.probes = dict(cfg["probes"] or {})
         exe = root / cfg["repl_dir"] / ".lake" / "build" / "bin" / ("repl.exe" if sys.platform == "win32" else "repl")
         self.repl_cmd = repl_cmd or ["lake", "env", str(exe)]
         self.repl_exe = None if repl_cmd else exe
@@ -501,6 +537,25 @@ class LeanRunner:
         with self._lock:
             return self._ensure_repl()
 
+    def ensure_available(self) -> bool:
+        """Start the REPL; if it cannot be used, measure the file back-end's import (with the same
+        probes). False → Lean cannot check anything: callers must not start (run_eval stops
+        before any LLM call). Never raises."""
+        with self._lock:
+            try:
+                if self._ensure_repl():
+                    return True
+                return self._import_time(self.base_imports) is not None
+            except Exception as exc:  # noqa: BLE001
+                self._warn("availability_check_failed", error=repr(exc))
+                return False
+
+    @property
+    def available(self) -> bool:
+        """False once both back-ends are known to be unusable (the REPL was given up and the file
+        back-end's import with the probes failed); checked by run_eval between problems."""
+        return not (self._repl_failed and self.file_import_s.get("\n".join(self.base_imports), 0.0) is None)
+
     def _ensure_repl(self) -> bool:
         try:
             return self._start_repl()
@@ -516,27 +571,58 @@ class LeanRunner:
         self._stop_repl()
         if self.repl_exe is not None and not self.repl_exe.exists():
             return self._repl_unavailable("repl_not_built", path=str(self.repl_exe), hint="bash scripts/build_repl.sh")
+        # An import that fails, or that "succeeds" without the probes answering, is retried once
+        # with a fresh process (team decision 2026-11-03); then the file back-end takes over.
+        for attempt in (1, 2):
+            outcome, reason, detail = self._launch_repl()
+            if outcome == "ok":
+                return True
+            if outcome == "fatal" or attempt == 2:
+                return self._repl_unavailable(reason, attempts=attempt, **detail)
+            self._warn(reason, attempt=attempt, action="restart", **detail)
+        return False  # not reached
+
+    def _launch_repl(self) -> tuple[str, str, dict]:
+        """One REPL process: import the base, then check the probes → ("ok" | "retry" | "fatal",
+        warning reason, detail). A start timeout or memory kill is fatal (retrying would wait
+        `startup_timeout_s` again); an import error, a dead process or a failed probe is retried."""
         t0 = time.perf_counter()
         try:
             repl = ReplProcess(self.repl_cmd, self.project_dir, self.kill_memory_mb, self.memory_poll_s)
         except OSError as exc:
-            return self._repl_unavailable("repl_launch_failed", error=repr(exc))
+            return "fatal", "repl_launch_failed", {"error": repr(exc)}
         try:
             header = "\n".join(f"import {m}" for m in self.base_imports)
             resp = repl.request({"cmd": header}, self.startup_timeout_s)
-        except (ReplTimeout, ReplMemoryExceeded, ReplDied) as exc:
+            errors = [m for m in resp.get("messages", []) if m.get("severity") == "error"]
+            if not isinstance(resp.get("env"), int) or errors:
+                repl.kill()
+                return "retry", "repl_import_failed", {"reply": json.dumps(resp, ensure_ascii=False)[:2000]}
+            text, lines = probe_lines(self.base_imports, self.probes)
+            probe = repl.request({"cmd": text, "env": resp["env"]}, self.timeout_s) if text else {}
+        except ReplDied as exc:
             repl.kill()
-            return self._repl_unavailable("repl_start_failed", error=f"{type(exc).__name__}: {exc}")
-        errors = [m for m in resp.get("messages", []) if m.get("severity") == "error"]
-        if not isinstance(resp.get("env"), int) or errors:
+            return "retry", "repl_start_failed", {"error": f"{type(exc).__name__}: {exc}"}
+        except (ReplTimeout, ReplMemoryExceeded) as exc:
             repl.kill()
-            return self._repl_unavailable("repl_import_failed", reply=json.dumps(resp, ensure_ascii=False)[:2000])
+            return "fatal", "repl_start_failed", {"error": f"{type(exc).__name__}: {exc}"}
+        ok, why = probe_ok([_message(m) for m in probe.get("messages", [])], lines,
+                           self.base_imports[0] if self.base_imports else None, self.probes)
+        probe_env = probe.get("env")
+        if ok and (not isinstance(probe_env, int) or probe_env <= resp["env"]):
+            ok, why = False, f"unexpected env id {probe_env!r} after the probe"
+        if not ok:
+            seconds, memory = round(time.perf_counter() - t0, 2), round(repl.memory_mb())
+            repl.kill()
+            return "retry", "repl_probe_failed", {"detail": why, "seconds": seconds, "memory_mb": memory}
         repl.children = descendants(repl.proc.pid)
-        self._repl, self._env, self._last_env = repl, resp["env"], resp["env"]
+        repl.start_commands = repl.commands
+        self._repl, self._env, self._last_env = repl, resp["env"], probe_env
         self.starts += 1
         _event(logging.INFO, "lean_runner_info", message="repl started", imports=self.base_imports,
-               seconds=round(time.perf_counter() - t0, 2), memory_mb=round(repl.memory_mb()), starts=self.starts)
-        return True
+               probes=list(lines.values()), seconds=round(time.perf_counter() - t0, 2),
+               memory_mb=round(repl.memory_mb()), starts=self.starts)
+        return "ok", "", {}
 
     def _repl_unavailable(self, reason: str, **detail) -> bool:
         self._repl_failed = True
@@ -565,7 +651,8 @@ class LeanRunner:
         """For run_config.json (RNF-2): REPL version, back-end use and degradation."""
         return {**repl_env_info(self.root, {"lean": self.cfg}), "degraded": self.file_verifications > 0,
                 "file_verifications": self.file_verifications, "file_import_s": dict(self.file_import_s),
-                "repl_starts": self.starts, "cache_hits": self.cache_hits}
+                "repl_starts": self.starts, "cache_hits": self.cache_hits, "probes": self.probes,
+                "repl_given_up": self._repl_failed and self.backend == "repl", "available": self.available}
 
     # -- verification -------------------------------------------------------
 
@@ -606,7 +693,7 @@ class LeanRunner:
             return self._verify_file(code, modules, theorem, timeout)
         if not self._ensure_repl():
             return self._verify_file(code, modules, theorem, timeout)
-        if self._repl.commands > self.restart_every:  # `commands` includes the import
+        if self._repl.commands - self._repl.start_commands >= self.restart_every:  # import and probe not counted
             _event(logging.INFO, "lean_runner_info", message="preventive restart", commands=self._repl.commands)
             self._stop_repl()
             if not self._ensure_repl():
@@ -678,11 +765,17 @@ class LeanRunner:
         key = "\n".join(modules)
         if key not in self.file_import_s:
             t0 = time.perf_counter()
-            status, rc, out, err = self._run_file("\n".join(f"import {m}" for m in modules) + "\n",
+            probe, lines = probe_lines(modules, self.probes, first_line=len(modules) + 1)
+            status, rc, out, err = self._run_file("".join(f"import {m}\n" for m in modules) + probe,
                                                   self.startup_timeout_s)
-            if status != "finished" or rc != 0:
+            ok, why = (False, "")
+            if status == "finished" and rc == 0:
+                messages, _, _ = parse_json_lines(out)
+                primary = self.base_imports[0] if self.base_imports and self.base_imports[0] in modules else None
+                ok, why = probe_ok(messages, lines, primary, self.probes)
+            if not ok:
                 self._warn("file_import_failed", imports=modules, status=status, exit_code=rc,
-                           detail=(err or out).strip()[:2000])
+                           detail=(why or (err or out).strip())[:2000])
                 self.file_import_s[key] = None
                 return None
             self.file_import_s[key] = round(time.perf_counter() - t0, 2)

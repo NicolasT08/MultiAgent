@@ -420,8 +420,8 @@ def test_every_ablation_only_sets_flags_over_pipeline_yaml():
     assert {k: v for k, v in cfgs["C5"].items() if k != "critic"} == {k: v for k, v in base.items() if k != "critic"}
     assert cfgs["C4"]["critic"]["llm_feedback"] is False
     for name, cfg in cfgs.items():
-        assert cfg["budget"]["b_max"] == (10 if name == "C1" else 40), name
-    assert cfgs["C1"]["baselines"]["baseline_a"]["attempts"] == 10
+        assert cfg["budget"]["b_max"] == (18 if name == "C1" else 40), name  # C1: 264/15 dev calls of C5
+    assert cfgs["C1"]["baselines"]["baseline_a"]["attempts"] == 18
     assert structural_bound(limits_from(cfgs["C5"]), n_max=3, samples=3) == 40
 
 

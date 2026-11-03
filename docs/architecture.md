@@ -53,6 +53,13 @@ Rules the components enforce (CLAUDE.md §1):
   `statement.py` writes every theorem, lemma, skeleton and assembled file.
 - Every generated text passes `sanitize.py` and then `syntax_check.py` before Lean
   compiles it. Fixed tactic lists from `pipeline.yaml` pass `sanitize.py` too.
+- Lean must really have Mathlib loaded: after the import the REPL answers `#check @<probe>`
+  (`pipeline.yaml → lean.probes`) at start and at every restart; on failure it is restarted
+  once, then the file back-end runs the same probes. `run_eval.py` calls
+  `runner.ensure_available()` before the first problem and after each one; if neither
+  back-end loads, the run stops with status `lean_unavailable` (exit code 2) before any
+  further LLM call, and the last problem's row is marked `lean_down`.
+- `run_eval.py` copies its console to `runs/<run>/console.log`.
 - Every LLM call goes through `llm/client.py` and counts for the problem's `b_max`.
 - κ and π are pure functions; the Critic's optional LLM advice runs after π has decided.
 

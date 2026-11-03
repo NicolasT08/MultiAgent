@@ -26,6 +26,12 @@ lean:
   # Back-end chosen 2026-10-25 (PLAN.md Phase 2): the Lean REPL keeps Mathlib loaded
   # (~0.01-0.5 s per check vs ~32 s for `lake env lean` per file). Fallback: per file.
   backend: repl             # repl | file
+  # `#check @<name>` after the import, at start, at every restart and in the file back-end's import
+  # check (2026-11-03: a REPL once answered `import Mathlib` without Mathlib). Fail → restart once →
+  # file back-end → run_eval stops before any LLM call if neither loads (status lean_unavailable).
+  probes:
+    Mathlib: [Real.sqrt, Finset.sum_range_succ]
+    Aesop: Aesop.BuiltinRules.not_intro
   project_dir: lean_project
   repl_dir: lean_repl       # built by scripts/build_repl.sh (tag v4.36.0-rc1)
   # Imports of the REPL's environment 0. Code whose imports are a subset runs in the REPL;

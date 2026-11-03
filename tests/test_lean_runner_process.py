@@ -3,13 +3,14 @@ memory limit, crashes and the file fallback. No Lean needed."""
 
 from __future__ import annotations
 
+import json
 import sys
 import time
 from pathlib import Path
 
 import pytest
 
-from formal_mas.lean.runner import LeanResult, LeanRunner
+from formal_mas.lean.runner import LeanResult, LeanRunner, probe_lines
 
 FAKE = str(Path(__file__).with_name("fake_repl.py"))
 CODE = "import Mathlib\n\ntheorem t : True := trivial\n"
@@ -92,9 +93,11 @@ def test_fallback_when_repl_does_not_start():
     r = make_runner("--fail-start")
     res = r.verify(CODE)
     assert res.backend == "file" and res.detail == "fallback"
-    assert r.warnings[0]["reason"] == "repl_start_failed" and r.warnings[0]["fallback"] == "file"
+    # a process that dies at start-up is tried once more (2026-11-03), then the file back-end
+    assert r.warnings[0]["reason"] == "repl_start_failed" and r.warnings[0]["action"] == "restart"
+    assert r.warnings[1]["reason"] == "repl_start_failed" and r.warnings[1]["fallback"] == "file"
     r.verify(CODE)
-    assert len(r.warnings) == 1  # the REPL is not retried on every call
+    assert len(r.warnings) == 2  # the REPL is not retried on every call
 
 
 def test_fallback_on_startup_timeout():
@@ -168,15 +171,26 @@ def test_unfinished_results_are_not_cached():
 # -- plan B (file back-end) ----------------------------------------------------------
 
 
+def check_answers(code: str, error: bool = False) -> str:
+    """`lean --json` lines answering each `#check @X` of the code (an error with `error`)."""
+    out = []
+    for i, line in enumerate(code.split("\n"), start=1):
+        if line.startswith("#check @"):
+            name = line.split("@", 1)[1].strip()
+            out.append(json.dumps({"severity": "error" if error else "information", "pos": {"line": i, "column": 0},
+                                   "data": f"Unknown constant `{name}`" if error else f"{name} : Prop"}))
+    return "\n".join(out)
+
+
 def file_runner(**cfg) -> tuple[LeanRunner, list[tuple[str, float]]]:
     """Runner on the file back-end with `lake env lean` replaced by a recorder."""
     calls: list[tuple[str, float]] = []
 
     def fake_run(code: str, timeout: float):
         calls.append((code, timeout))
-        if code.strip().endswith("import Mathlib\nimport Aesop") or "theorem" not in code:
+        if "theorem" not in code:
             time.sleep(0.2)  # the measured import
-        return "finished", 0, "", ""
+        return "finished", 0, check_answers(code), ""
 
     r = LeanRunner({"lean": {"backend": "file", "timeout_s": 3, "startup_timeout_s": 999,
                              "base_imports": ["Mathlib", "Aesop"], "cache_size": 0, **cfg}})
@@ -233,5 +247,108 @@ def test_cache_returns_independent_copies():
         first.messages.append(None)
         again = r.verify(CODE, theorem="t")
         assert again.cached and again.axioms == ["propext"] and again.messages == []
+    finally:
+        r.close()
+
+
+# -- start-up probes (2026-11-03: an import answered without Mathlib) ------------------------
+
+
+def test_repl_without_mathlib_is_not_accepted():
+    r = make_runner("--no-mathlib")
+    try:
+        res = r.verify(CODE, theorem="t")
+        assert res.backend == "file" and r.starts == 0  # never used as a REPL
+        first, last = r.warnings[0], r.warnings[-1]
+        assert first["reason"] == "repl_probe_failed" and first["action"] == "restart" and first["attempt"] == 1
+        assert "Unknown constant `Real.sqrt`" in first["detail"]
+        assert last["reason"] == "repl_probe_failed" and last["attempts"] == 2 and last["fallback"] == "file"
+    finally:
+        r.close()
+
+
+def test_probe_without_answer_is_not_accepted():
+    r = make_runner("--silent-probe")
+    try:
+        assert r.verify(CODE).backend == "file"
+        assert "no answer for `#check @Real.sqrt`" in r.warnings[0]["detail"]
+    finally:
+        r.close()
+
+
+def test_failed_probe_restarts_once(tmp_path):
+    r = make_runner("--no-mathlib-once", str(tmp_path / "marker"))
+    try:
+        res = r.verify(CODE, theorem="t")
+        assert (res.backend, res.axioms, r.starts) == ("repl", ["propext"], 1)
+        assert [w["reason"] for w in r.warnings] == ["repl_probe_failed"]
+    finally:
+        r.close()
+
+
+def test_probe_runs_on_every_restart():
+    r = make_runner()
+    try:
+        assert r.verify(CODE, theorem="t").backend == "repl"
+        r.repl_cmd = [*r.repl_cmd, "--no-mathlib"]  # the next process imports without Mathlib
+        assert r.verify(CODE + "-- DIE\n").status == "crash"
+        assert r.verify(CODE, theorem="t").backend == "file"
+        assert [w["reason"] for w in r.warnings][-2:] == ["repl_probe_failed", "repl_probe_failed"]
+    finally:
+        r.close()
+
+
+def test_probe_counts_neither_for_restart_every():
+    r = make_runner(restart_every=2)
+    try:
+        for _ in range(4):
+            r.verify(CODE)
+        assert r.starts == 2
+    finally:
+        r.close()
+
+
+def test_probe_requires_the_primary_import_to_have_one():
+    r = make_runner(probes={"Aesop": "Aesop.BuiltinRules.not_intro"})
+    try:
+        assert r.verify(CODE).backend == "file"
+        assert "no probe configured for 'Mathlib'" in r.warnings[0]["detail"]
+    finally:
+        r.close()
+
+
+def test_ensure_available():
+    r = make_runner()
+    try:
+        assert r.ensure_available() and r.available and r.starts == 1
+    finally:
+        r.close()
+    # REPL without Mathlib, file back-end fine → available (degraded)
+    r, calls = file_runner()
+    r.backend, r._repl_failed = "repl", True
+    assert r.ensure_available() and r.available and "#check @Real.sqrt" in calls[0][0]
+    # neither back-end loads Mathlib → not available, and the result is remembered
+    r, _ = file_runner()
+    r._run_file = lambda code, timeout: ("finished", 0, check_answers(code, error=True), "")
+    assert r.ensure_available() is False and r.available is False
+    assert r.warnings[-1]["reason"] == "file_import_failed" and "Unknown constant" in r.warnings[-1]["detail"]
+    assert r.verify(CODE).status == "crash"
+
+
+def test_file_backend_probe_must_answer():
+    r, _ = file_runner()
+    r._run_file = lambda code, timeout: ("finished", 0, "", "")  # exit 0, no messages at all
+    assert r.verify(CODE).status == "crash" and "no answer" in r.warnings[-1]["detail"]
+
+
+def test_a_module_may_have_several_probes():
+    text, lines = probe_lines(["Mathlib", "Aesop"], {"Mathlib": ["Real.sqrt", "Finset.sum_range_succ"], "Aesop": "A.b"})
+    assert text == "#check @Real.sqrt\n#check @Finset.sum_range_succ\n#check @A.b\n"
+    assert lines == {1: "Real.sqrt", 2: "Finset.sum_range_succ", 3: "A.b"}
+    r = make_runner()
+    try:
+        assert r.ensure_available()
+        info = r.run_info()
+        assert info["available"] is True and info["repl_given_up"] is False and "Mathlib" in info["probes"]
     finally:
         r.close()

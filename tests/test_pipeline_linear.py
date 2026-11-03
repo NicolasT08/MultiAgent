@@ -330,6 +330,11 @@ def test_run_eval_c4(tmp_path, monkeypatch):
         def start(self):
             return True
 
+        def ensure_available(self):
+            return True
+
+        available = True
+
         def close(self):
             pass
 
@@ -350,3 +355,86 @@ def test_run_eval_c4(tmp_path, monkeypatch):
     assert row["status"] == "solved" and row["solved"] is True and row["stage"] == "assemble"
     assert row["llm"]["llm_calls"] == 7 and "have h2 : y = 2" in row["proof"]
     assert json.loads((run_dir / "run_config.json").read_text(encoding="utf-8"))["summary"]["solved"] == 1
+
+
+def test_run_eval_stops_before_any_llm_call_without_lean(tmp_path, monkeypatch):
+    monkeypatch.delenv("MODEL_PROFILE", raising=False)
+    spec = importlib.util.spec_from_file_location("run_eval_nolean", ROOT / "scripts" / "run_eval.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    data = tmp_path / "p.jsonl"
+    data.write_text(json.dumps({**PROBLEM, "split": "dev"}) + "\n", encoding="utf-8")
+    clock = FakeClock()
+    sent = []
+
+    def never(request):
+        sent.append(request)
+        return answer()(request)
+
+    class Runner(FakeLean):
+        base_imports, warnings, available = ["Mathlib", "Aesop"], [{"reason": "repl_probe_failed"}], False
+
+        def ensure_available(self):
+            return False
+
+        def close(self):
+            pass
+
+        def run_info(self):
+            return {"backend": "fake"}
+
+    class Retr(FakeRetriever):
+        mode, warnings = "fake", []
+
+    rc = mod.main(["--config", "C5", "--data", str(data)], models_cfg=MODELS_CFG,
+                  pipeline_cfg={**pipeline_cfg(), **CFG},
+                  client_kwargs={"transport": FakeTransport(never), "cache_dir": tmp_path / "cache",
+                                 "clock": clock, "sleep": clock.sleep, "monotonic": clock.monotonic},
+                  runner_factory=Runner, retriever_factory=Retr, runs_dir=tmp_path / "runs")
+    assert rc == 2 and sent == []
+    run_dir = next((tmp_path / "runs").iterdir())
+    assert (run_dir / "results.jsonl").read_text(encoding="utf-8") == ""
+    cfg_out = json.loads((run_dir / "run_config.json").read_text(encoding="utf-8"))
+    assert cfg_out["status"] == "lean_unavailable" and cfg_out["summary"]["problems"] == 0
+    trace = [json.loads(l) for l in (run_dir / "trace.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert any(e["event"] == "run_lean_unavailable" for e in trace)
+    assert not any(e["event"] == "llm_call" for e in trace)
+
+
+def test_run_eval_stops_between_problems_when_lean_goes_down(tmp_path, monkeypatch):
+    monkeypatch.delenv("MODEL_PROFILE", raising=False)
+    spec = importlib.util.spec_from_file_location("run_eval_down", ROOT / "scripts" / "run_eval.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    data = tmp_path / "p.jsonl"
+    data.write_text("".join(json.dumps({**PROBLEM, "id": f"p{i}", "split": "dev"}) + "\n" for i in range(3)),
+                    encoding="utf-8")
+    clock = FakeClock()
+
+    class Runner(FakeLean):
+        base_imports, warnings, checks = ["Mathlib"], [], []
+
+        def ensure_available(self):  # fine at start, gone after the first problem
+            self.checks.append(1)
+            return len(self.checks) == 1
+
+        def close(self):
+            pass
+
+        def run_info(self):
+            return {"backend": "fake"}
+
+    class Retr(FakeRetriever):
+        mode, warnings = "fake", []
+
+    rc = mod.main(["--config", "C4", "--data", str(data)], models_cfg=MODELS_CFG,
+                  pipeline_cfg={**pipeline_cfg(), **CFG},
+                  client_kwargs={"transport": FakeTransport(answer()), "cache_dir": tmp_path / "cache",
+                                 "clock": clock, "sleep": clock.sleep, "monotonic": clock.monotonic},
+                  runner_factory=Runner, retriever_factory=Retr, runs_dir=tmp_path / "runs")
+    assert rc == 2
+    run_dir = next((tmp_path / "runs").iterdir())
+    rows = (run_dir / "results.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(rows) == 1 and json.loads(rows[0])["lean_down"] is True  # marked: its failures may be Lean's
+    cfg_out = json.loads((run_dir / "run_config.json").read_text(encoding="utf-8"))
+    assert cfg_out["status"] == "lean_unavailable"

@@ -1,9 +1,13 @@
 # C1, Baseline A (report, IV-A8): single LLM, direct prompting for a Lean 4 proof, no agents.
-# Budget (team rule, PLAN.md Phase 6, measured 2026-10-31): C1 costs more per call than C5, so it gets C5's mean calls
-# per problem on dev (9.6, rounded up): the same mean computation, not the same B_max.
+# Budget (team rule, PLAN.md Phase 6): if C1 costs more per call than C5, it gets C5's mean calls per
+# problem on dev (the same mean computation, not the same B_max); otherwise B_max = 40.
+# Fixed 2026-11-03 (Phase 8 Part A, team decision): final C5 configuration after prompt tuning
+# Round 1, runs/20261103T151038Z_C5_experiment_r1: 264 calls on the 15 dev problems = 17.6 → 18.
+# C1 costs more per call than C5, so the second case applies: measured 2026-11-03 on 3 dev problems (one
+# per difficulty, runs/20261103T161957Z_C1_experiment_c1_cost): C1 $0.0136 nominal per call vs C5 $0.0020.
 flow: baseline_a
 budget:
-  b_max: 10
+  b_max: 18
 baselines:
   baseline_a:
-    attempts: 10
+    attempts: 18

@@ -14,6 +14,10 @@ from formal_mas.lean.syntax_check import SyntaxChecker, _last, check_kinds, kind
     "null", "num", "token.«⊢»", "Lean.Parser.Tactic.omega", "Mathlib.Tactic.nlinarith", "Lean.Parser.Term.app",
     "Lean.Parser.Term.dotIdent", "Lean.Parser.Term.anonymousCtor", "«term_+_»", "Real.«term√_»", "Nat.term_!",
     "Lean.«binderPred∈_»", "Lean.«term∀__,_»", "BigOperators.bigsum", "termℝ", "Mathlib.Notation.«term∃!_,_»",
+    # rejected in the C5 dev run of 2026-11-03 although legitimate
+    "Lean.Parser.Tactic.classical", "Mathlib.Linter.HaveILetI.tacticLetI__", "Mathlib.Linter.HaveILetI.tacticHaveI__",
+    "Mathlib.Meta.SetNotationForOrder.subsetStx'", "Mathlib.Meta.SetNotationForOrder.ssubsetStx'",
+    "Mathlib.Meta.SetNotationForOrder.supsetStx'", "Mathlib.Meta.SetNotationForOrder.ssupsetStx'",
 ])
 def test_allowed_kinds(kind):
     assert kind_allowed(kind) == (True, ""), kind

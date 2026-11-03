@@ -43,7 +43,12 @@ OLYMPIAD = [
     "interval_cases x <;> interval_cases y <;> (try norm_num at h₀) <;> (try norm_num)",
     "(simp; omega)", "all_goals (try omega)", "iterate 3 (rw [h])", "done", "skip", "solve | simp | omega",
     "on_goal 2 => simp", "swap", "pick_goal 2", "rotate_left", "repeat' constructor", "rename' h => h'", "nofun",
+    # rejected in the C5 dev run of 2026-11-03 (runs/20261103T130158Z_C5_experiment) although legitimate
+    "classical\nexact h", "letI : Inhabited ℕ := ⟨0⟩\nexact h", "haveI : Nonempty ℕ := ⟨1⟩\nexact h",
+    "have hsub : s ⊆ t := h\nexact hsub", "exact (h : s ⊂ t)", "exact (h : t ⊇ s)", "exact (h : t ⊃ s)",
 ]
+# Subgoal propositions with set notation (the Planner's subgoals go through the same whitelist).
+OLYMPIAD_TERMS = ["s ⊆ t", "s ⊂ t ∧ t ⊇ s", "∀ x, {x} ⊃ (∅ : Set ℕ)"]
 # Pass the text blacklist (no forbidden word or identifier) but are not proofs.
 PARSER_ONLY = {
     "polyrith": "search", "simp?": "search", "rw?": "search", "aesop?": "search", "hint": "search",
@@ -65,8 +70,9 @@ def test_valid_blocks_and_olympiad_tactics_pass(checker):
     blocks = [b for b in VALID_BLOCKS if b not in NEEDS_OPEN_FINSET] + OLYMPIAD
     bad = [(b, r) for b, r in zip(blocks, checker.check(DEFAULT_HEADER, tactics=blocks)) if not r.ok]
     assert bad == []
-    terms = [t for t in VALID_TERMS if t not in NEEDS_OPEN_FINSET]
-    assert all(r.ok for r in checker.check(DEFAULT_HEADER, terms=terms))
+    terms = [t for t in VALID_TERMS if t not in NEEDS_OPEN_FINSET] + OLYMPIAD_TERMS
+    bad_terms = [(t, r) for t, r in zip(terms, checker.check(DEFAULT_HEADER, terms=terms)) if not r.ok]
+    assert bad_terms == []
 
 
 def test_attacks_are_still_rejected(checker):
