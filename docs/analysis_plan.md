@@ -171,6 +171,15 @@ No deviation from the analysis itself. Infrastructure incidents during the `test
   figures come from its kept row only. Cache hits lower the real cost of the resume runs but not
   their nominal cost, and nominal cost is the figure compared (§1).
 
+- **2026-11-03, run order C4 before C3.** C4 was run right after C5, and C3 moved to the next
+  off-peak morning, so the order is C5, C4, C3, C2, C1 instead of C5, C3, C4, C2, C1 (§1). The
+  reason is schedule and cost only. C3 takes about 3 h and would have run into the provider's peak
+  window (01:00 UTC), while C4 is short and is answered mostly from the cache of C5. This has no
+  effect on the analysis. Each configuration is still run once on the same 30 problems with the
+  same frozen configuration, and the comparisons are paired by problem. C4 shares its cached
+  requests with C5, not with C3, so its cache hits are the same in either order. Costs are compared
+  at nominal prices (§1), so run order does not favour either configuration.
+
 Clarifications written before any run on `test`:
 
 - **2026-11-03, FPR_B check (§4.2), how "the Autoformalizer–Verifier loop with the same budget" is
