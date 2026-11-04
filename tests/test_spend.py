@@ -206,7 +206,7 @@ def test_real_pipeline_yaml_has_the_caps():
     from formal_mas.config import load_pipeline
 
     spend = load_pipeline()["spend"]
-    assert spend["total_usd"] == 9.0 and spend["run_usd"] == 1.0
+    assert spend["total_usd"] == 9.0 and spend["run_usd"] == 2.0
     assert spend["ledger"] == "data/spend_ledger.jsonl"
     assert "data/spend_ledger.jsonl" in (ROOT / ".gitignore").read_text(encoding="utf-8")
     guard = SpendGuard.from_config({"spend": spend}, root=Path("/x"))

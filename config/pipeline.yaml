@@ -74,7 +74,7 @@ spend:
   # (every prompt byte as a cache-miss token + all of max_tokens as output) fits under both
   # caps; otherwise the problem is `budget_stop` and the run ends. Only the team raises them.
   total_usd: 9.0            # whole project (sum of the ledger, all runs)
-  run_usd: 1.0              # one run (run_eval.py --run-usd may lower it, never raise it)
+  run_usd: 2.0              # one run (run_eval.py --run-usd may lower it, never raise it)
   ledger: data/spend_ledger.jsonl   # one line per paid call; outside git
   default_max_tokens: 65536 # worst-case output when a request sets no max_tokens
 

@@ -180,6 +180,17 @@ No deviation from the analysis itself. Infrastructure incidents during the `test
   requests with C5, not with C3, so its cache hits are the same in either order. Costs are compared
   at nominal prices (§1), so run order does not favour either configuration.
 
+- **2026-11-04, per-run spend cap raised from 1.0 to 2.0 USD before C3 on `test`.** Team decision.
+  Only `config/pipeline.yaml → spend.run_usd` changed (1.0 → 2.0); `run_eval.py --run-usd` can only
+  lower that cap, so C3 (about 3 h, no cache shared with C5 because its prompts carry no lemmas;
+  C5 on `test` cost 1.36 USD real in total) would otherwise very likely end in `budget_stop`
+  before the 30th problem. This is a spend-control change, not a method change: the cap is
+  checked before each paid request and only decides whether the request is sent, so it does not
+  change any prompt, model, budget `B_max`/`b_max`, policy or result of a request that is sent. The
+  project cap `spend.total_usd` stays at 9.0 USD. C5 and C4 ran under the 1.0 USD cap (or a lower
+  `--run-usd`); C3 runs with `--run-usd 2.00`. The offline test that pins the configured caps
+  (`tests/test_spend.py::test_real_pipeline_yaml_has_the_caps`) was updated to the new value.
+
 Clarifications written before any run on `test`:
 
 - **2026-11-03, FPR_B check (§4.2), how "the Autoformalizer–Verifier loop with the same budget" is
