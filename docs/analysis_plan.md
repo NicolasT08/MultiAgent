@@ -191,6 +191,16 @@ No deviation from the analysis itself. Infrastructure incidents during the `test
   `--run-usd`); C3 runs with `--run-usd 2.00`. The offline test that pins the configured caps
   (`tests/test_spend.py::test_real_pipeline_yaml_has_the_caps`) was updated to the new value.
 
+- **2026-11-05, per-run spend cap raised from 2.0 to 3.5 USD before C1 on `test`.** Team decision.
+  Only `config/pipeline.yaml → spend.run_usd` changed (2.0 → 3.5). C1 costs more per call than C5
+  (the cost run `20261103T161957Z_C1_experiment_c1_cost` spent 0.21 USD real on 3 `dev` problems,
+  about 0.07 USD per problem), so 30 problems would likely end in `budget_stop` under 2.0 USD. As
+  before, this is a spend-control change, not a method change: the cap is checked before each paid
+  request and only decides whether the request is sent, so it does not change any prompt, model,
+  budget `B_max`/`b_max`, policy or result of a request that is sent. The project cap
+  `spend.total_usd` stays at 9.0 USD. C1 runs with `--run-usd 3.50`. The offline test that pins
+  the configured caps was updated to the new value.
+
 Clarifications written before any run on `test`:
 
 - **2026-11-03, FPR_B check (§4.2), how "the Autoformalizer–Verifier loop with the same budget" is
