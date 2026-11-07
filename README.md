@@ -7,6 +7,18 @@ course, UPTC Sogamoso.
 
 Team: Andrés Felipe Mongui Torres and Nicolás Samuel Tinjacá Topia.
 
+## Start here
+
+New to Lean or to this project? Read these two pages first; they assume programming
+experience but no Lean:
+
+- [How it works](docs/how_it_works.md): why Lean is needed, the agents, the full flow with a
+  diagram, and one real problem traced from start to finish.
+- [What was tested and what came out](docs/results_explained.md): the dataset, the five
+  configurations C1–C5, the results on `test` and their limitations.
+
+The rest of this README covers architecture details, installation, usage and reproduction.
+
 ---
 
 ## 1. How the system works
