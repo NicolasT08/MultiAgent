@@ -201,6 +201,17 @@ No deviation from the analysis itself. Infrastructure incidents during the `test
   `spend.total_usd` stays at 9.0 USD. C1 runs with `--run-usd 3.50`. The offline test that pins
   the configured caps was updated to the new value.
 
+- **2026-11-05, C1 on `test` stopped by the team.** Run `20261105T131443Z_C1_experiment` (commit
+  `5ed7507`, clean tree, `--run-usd 3.50`) was stopped on purpose at about 17:43 UTC, together with
+  its whole process tree (REPL, `lake`), to free the machine for other work. It is an operational
+  incident, not a decision of the method: no code, prompt, model or configuration changed. 23 of 30
+  problems had finished and are kept unchanged; the 24th (`imo_1987_p6`) was cut mid-problem
+  (after 10 calls, 0.10 USD real) and left no row in `results.jsonl`. There was no `provider_error`
+  or `budget_stop`. The 7 problems without a row will be completed in a resume run, following the
+  same procedure as for C5 (same frozen configuration, seed and cache; input file with exactly the
+  needed lines of `data/eval.jsonl`; `imo_1987_p6` run from scratch, its earlier spend counted in the
+  project's real cost but in no kept row).
+
 Clarifications written before any run on `test`:
 
 - **2026-11-03, FPR_B check (§4.2), how "the Autoformalizer–Verifier loop with the same budget" is
