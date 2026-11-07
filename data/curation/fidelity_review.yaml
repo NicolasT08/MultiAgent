@@ -25,3 +25,30 @@ verification_limits: >-
   Most truth checks are finite (Python) or by reading; the review establishes that statements match
   the informal text, not that they are theorems. imo_2006_p3 and putnam_1995_b1 were checked only for
   the match. mathd_numbertheory_232 rests on hand arithmetic: `decide` could not reduce the ZMod goal.
+post_test_review:
+  # Manual review after the runs on `test` (team decision 2026-11-03, PLAN.md Phase 9): every problem
+  # solved on `test` by any configuration (C2 counts only if its --check proof was accepted) that has
+  # an entry under `notes`. Accepted proof read against the informal text. The Lean verdict never
+  # changes; this only decides how the success is reported. No count changes: all four count.
+  date: 2026-11-07
+  reviewed_by: team (Andres Mongui, Nicolas Tinjaca)
+  not_applicable:
+    imo_2006_p3: dev split
+    imo_1987_p6: not solved on test by any configuration
+    putnam_1995_b1: not solved on test by any configuration
+  verdicts:
+    mathd_algebra_455: {solved_by: [C1, C2_check, C3, C4, C5], counts: true, report_note: null,
+      reason: "Faithful: the reduced equation is the problem."}
+    mathd_algebra_234: {solved_by: [C1, C2_check, C3, C4, C5], counts: true, report_note: null,
+      reason: "Faithful: the proofs compute the ratio and the sixth term."}
+    putnam_1965_b2: {solved_by: [C1, C3, C5], counts: true, report_note: null,
+      reason: "Faithful: defining l as n - 1 - w does not give the result away; every proof uses
+        irreflexivity and antisymmetry to get sum w = n(n-1)/2 (C1 also proves l r equals the
+        counted losses)."}
+    amc12b_2003_p6:
+      solved_by: [C1, C2_check, C3, C4, C5]
+      counts: true
+      report_note: >-
+        The formalization proves that u 0 = +-2/sqrt 3 (a necessary condition), not that
+        -2*sqrt(3)/3 is attained; this is enough to rule out the other options.
+      reason: "Counts as solved, with the note above in the report."
