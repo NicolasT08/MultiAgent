@@ -758,6 +758,28 @@ def t_status(ctx, out, notes):
               "Per-problem outcomes on test (1 = verified solved).", "per-problem", wide=True, align="lll" + "c" * 4 + "l")
 
 
+def t_hard(ctx, out):
+    """Post hoc, descriptive view of the hard problems per configuration (not in the analysis plan)."""
+    ids, data, meta = ctx["ids"], ctx["data"], ctx["meta"]
+    hard = [p for p in ids if meta[p]["difficulty"] == "hard"]
+    solved = {c: {p for p in hard if is_solved(c, data[c][p])} for c in VERIFIED}
+    rows = [[p, AREA_LABEL[meta[p]["area"]]] + ["1" if p in solved[c] else "0" for c in VERIFIED]
+            + [str(sum(p in solved[c] for c in VERIFIED))] for p in hard]
+    rows += ["MIDRULE", ["Solved", ""] + [f"{len(solved[c])}/{len(hard)}" for c in VERIFIED] + [""]]
+    none = [p for p in hard if not any(p in solved[c] for c in VERIFIED)]
+    same = "the same" if solved["C1"] == solved["C5"] else "different"
+    only = lambda a, b: ", ".join(sorted(solved[a] - solved[b])) or "none"  # noqa: E731
+    note = (f"Post hoc, descriptive (not in the analysis plan): no tests, no intervals. 1 = verified solved. "
+            f"C1 and C5 solve {same} hard problems ({len(solved['C1'])} and {len(solved['C5'])}); "
+            f"{len(none)} hard problems are solved by no configuration ({', '.join(none)}); "
+            f"C3 and C5 solve {len(solved['C3'])} and {len(solved['C5'])} hard problems, but only C3 solves "
+            f"{only('C3', 'C5')} and only C5 solves {only('C5', 'C3')}.")
+    out.table("Table 11b. Hard problems per configuration (supplementary; post hoc, descriptive, not in the analysis plan)",
+              ["Problem", "Area"] + VERIFIED + ["Solved by"], rows,
+              "Hard test problems per verified configuration (supplementary; post hoc, descriptive, not in the analysis plan).",
+              "hard", note=note, align="ll" + "c" * (len(VERIFIED) + 1))
+
+
 def t_candidates(ctx, out, notes):
     ids, data, s = ctx["ids"], ctx["data"], lambda c, p: is_solved(c, ctx["data"][c][p])
     cand = {
@@ -806,6 +828,7 @@ def analyse(mode: str, outdir: Path) -> None:
     t_kappa(ctx, out)
     t_prepass(ctx, out)
     t_status(ctx, out, notes)
+    t_hard(ctx, out)
     t_candidates(ctx, out, notes)
     out.text("## Generated data notes\n\n" + "\n".join(f"- {x}" for x in notes))
     outdir.mkdir(parents=True, exist_ok=True)

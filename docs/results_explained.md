@@ -64,6 +64,17 @@ No run had a `provider_error` or a `budget_stop` row in the merged results.
 By area (descriptive only): algebra / number theory / combinatorics solved out of 13 / 13 / 4:
 C1 10 / 8 / 2, C3 12 / 7 / 1, C4 5 / 7 / 2, C5 11 / 10 / 3.
 
+**The 10 hard problems** (post hoc, descriptive: this look was not in the analysis plan; the
+per-configuration table is Table 11b in `docs/results/results.md`). Three things stand out.
+C1 and C5 solve exactly the same 4 hard problems (imo_1964_p1_2, imo_1965_p2, putnam_1964_b2,
+putnam_1965_b2), so on the hard tier the whole C5 gain over C1 disappears. Five hard problems
+(imo_1978_p5, imo_1979_p1, imo_1984_p6, imo_1987_p6, putnam_1995_b1) are solved by no
+configuration. C3 and C5 also solve 4 each but differ by one problem in each direction: only
+C3 solves imo_1993_p5, only C5 solves putnam_1964_b2. Since C5 has everything C3 has plus
+retrieval, a hard problem that C3 solves and C5 does not shows how much a single run can vary
+from one to the next; each configuration was run once, so differences of one problem should
+not be read as an effect.
+
 ### 3.2 C2: what the LLM claimed vs what Lean confirmed
 
 C2 never uses Lean, so it cannot "solve" anything in the sense above. Instead it reports
