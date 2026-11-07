@@ -22,3 +22,5 @@ kaggle>=1.7
 openai==3.39.0
 # Phase 6 — the orchestrator's state graph.
 langgraph==1.2.19
+# Phase 9 — analysis figures (docs/results/make_tables.py → docs/results/figures/).
+matplotlib==3.11.2

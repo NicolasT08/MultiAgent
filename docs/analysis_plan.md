@@ -216,6 +216,21 @@ No deviation from the analysis itself. Infrastructure incidents during the `test
   dataset order; `--run-usd 1.65` = 3.50 minus the 1.8407 USD C1 had spent, rounded down, so that
   C1 as a whole stays under 3.50).
 
+- **2026-11-07, `dirty: true` in four `run_config.json` files (recording artefact, found in the
+  analysis).** `run_eval.py` rewrites `run_config.json` when a run ends, and the git state (and
+  `created_utc`) were read again at that moment instead of at launch. In
+  `20261103T212359Z_C5_experiment_resume`, `20261103T225140Z_C5_experiment_resume2`,
+  `20261103T235556Z_C4_experiment` and `20261107T200233Z_C1_experiment_resume` the only changed file
+  is `docs/analysis_plan.md`, edited while the run was going to log these very incidents; every
+  tree was clean at launch (checked before each run, as the Phase 8 rules require). No code,
+  prompt, configuration or data file changed, so the method is not affected. In those files
+  `created_utc` is also the end time; the start is the timestamp in the run name and the
+  `run_start` event of `trace.jsonl`. The two interrupted runs (`20261103T174646Z_C5_experiment`,
+  `20261105T131443Z_C1_experiment`) never reached the final rewrite and show their launch state.
+  Fixed after all `test` runs (`run_config.run_start_info`): `git` and `created_utc` now describe
+  the launch, and the state when the file is written goes to `git_end` and `written_utc`. Runs
+  already made are not rewritten.
+
 Clarifications written before any run on `test`:
 
 - **2026-11-03, FPR_B check (§4.2), how "the Autoformalizer–Verifier loop with the same budget" is

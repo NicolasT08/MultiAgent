@@ -285,6 +285,36 @@ def test_run_config_contents(tmp_path):
     assert saved["packages"]["openai"]
 
 
+def test_run_config_keeps_git_state_of_the_launch(tmp_path):
+    """run_config.json is rewritten at the end of a run: `git` and `created_utc` must still describe
+    the launch (a file edited mid-run goes to `git_end` only)."""
+    import subprocess
+    from formal_mas.run_config import run_start_info
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    (repo / "a.txt").write_text("x", encoding="utf-8")
+    git = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]
+    subprocess.run([*git, "add", "a.txt"], check=True)
+    subprocess.run([*git, "commit", "-q", "-m", "c"], check=True)
+    client, *_ = client_for(tmp_path, "x")
+    data = tmp_path / "d.jsonl"
+    data.write_text('{"id": "p"}\n', encoding="utf-8")
+    kw = dict(run_id="r", config_name="C1", seed=7, dataset=data, split="dev", llm_info=client.info(),
+              lean_run_info=None, pipeline_cfg={}, argv=["run_eval.py"], root=repo)
+    start = run_start_info(repo)
+    first = build_run_config(**kw, start=start)
+    assert first["git"]["dirty"] is False and first["git_end"]["dirty"] is False
+    (repo / "notes.md").write_text("edited while the run was going", encoding="utf-8")
+    final = build_run_config(**kw, start=start)
+    assert final["git"] == start["git"] and final["git"]["dirty"] is False
+    assert final["git_end"]["dirty"] is True and final["git_end"]["changed_files"] == ["notes.md"]
+    assert final["created_utc"] == first["created_utc"] == start["created_utc"]
+    assert final["written_utc"] >= final["created_utc"]
+    # Without `start` (one-off callers) both describe the moment of writing.
+    alone = build_run_config(**kw)
+    assert alone["git"]["dirty"] is True and alone["git_end"]["dirty"] is True
+
+
 def test_git_info_outside_a_repo(tmp_path):
     info = git_info(tmp_path)
     assert info["commit"] is None and info["dirty"] is None

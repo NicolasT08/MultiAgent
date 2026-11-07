@@ -101,17 +101,31 @@ def package_versions() -> dict:
     return out
 
 
+def run_start_info(root: Path = ROOT) -> dict:
+    """What must describe the run as it was launched: its start time and the git state then.
+
+    Taken once when the run starts and passed to every build_run_config call, because
+    run_config.json is rewritten at the end and the tree may change while a run is going.
+    """
+    return {"created_utc": iso(utc_now()), "git": git_info(root)}
+
+
 def build_run_config(*, run_id: str, config_name: str, seed: int, dataset: Path, split: str | None,
                      llm_info: dict, lean_run_info: dict | None, pipeline_cfg: dict, argv: list[str],
-                     root: Path = ROOT, extra: dict | None = None) -> dict:
+                     root: Path = ROOT, extra: dict | None = None, start: dict | None = None) -> dict:
+    """run_config.json (RNF-2). `git` and `created_utc` describe the launch (`start`, from
+    run_start_info; taken now when omitted); `git_end` and `written_utc` the moment of writing."""
+    if start is None:
+        start = run_start_info(root)
     return {
         "run_id": run_id, "config": config_name, "profile": llm_info.get("profile"), "seed": seed,
-        "created_utc": iso(utc_now()), "argv": argv,
+        "created_utc": start["created_utc"], "written_utc": iso(utc_now()), "argv": argv,
         "dataset": {"path": str(dataset), "sha256": file_sha256(dataset), "split": split},
         "models": llm_info, "lean": {**lean_versions(root, (pipeline_cfg.get("lean") or {}).get("project_dir",
                                                                                                   "lean_project")),
                                      "runner": lean_run_info},
-        "rag_index": rag_index_info(root, pipeline_cfg), "pipeline": pipeline_cfg, "git": git_info(root),
+        "rag_index": rag_index_info(root, pipeline_cfg), "pipeline": pipeline_cfg, "git": start["git"],
+        "git_end": git_info(root),
         "python": sys.version.split()[0], "platform": platform.platform(), "packages": package_versions(),
         **(extra or {}),
     }

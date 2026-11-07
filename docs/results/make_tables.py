@@ -4,16 +4,16 @@ Usage (from the repository root):
     .venv/Scripts/python.exe docs/results/make_tables.py            # test split -> docs/results/
     .venv/Scripts/python.exe docs/results/make_tables.py --dev OUT  # dry run on dev runs -> OUT/
 
-Nothing under runs/, data/, src/, scripts/ or config/ is written. The only import from src/ is the
-kappa classifier (formal_mas.orchestrator.policy.classify), used to classify C1 attempts (plan 4.5).
-Exact binomial and Wilson come from scipy.stats.binomtest; the bootstrap uses numpy default_rng.
-src/formal_mas/analysis/stats.py and scripts/compare.py (plan section 7) do not exist in the
-repository, so the statistics of the plan are implemented here.
+Nothing under runs/, data/, src/, scripts/ or config/ is written. Imports from src/: the statistics
+(formal_mas.analysis.stats) and the kappa classifier (formal_mas.orchestrator.policy.classify, for C1).
+The statistics (Wilson, exact McNemar, Bonferroni, bootstrap) come from
+src/formal_mas/analysis/stats.py, which has offline tests in tests/test_stats.py.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import random
 import statistics
 import sys
@@ -21,16 +21,14 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 import numpy as np
-from scipy.stats import binomtest
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
+from formal_mas.analysis.stats import (N_BOOT, SEED, boot_mean, boot_ratio, bonferroni,  # noqa: E402
+                                       bonferroni_reject, mcnemar_exact, paired_boot_diff, quartiles, wilson)
 from formal_mas.orchestrator.policy import ERROR_CLASSES, Trace, classify  # noqa: E402
 
 RUNS = ROOT / "runs"
-SEED = 2026
-N_BOOT = 10_000
-ALPHA = 0.05
 CONFIGS = ["C1", "C2", "C3", "C4", "C5"]
 VERIFIED = ["C1", "C3", "C4", "C5"]
 GRAPH = ["C3", "C4", "C5"]
@@ -134,57 +132,6 @@ def select_c1(notes: list[str]):
     return rows, origin
 
 
-# ----------------------------------------------------------------------------- statistics
-def wilson(k: int, n: int):
-    if n == 0:
-        return float("nan"), float("nan")
-    ci = binomtest(k, n).proportion_ci(confidence_level=0.95, method="wilson")
-    return ci.low, ci.high
-
-
-def mcnemar_exact(a: np.ndarray, b: np.ndarray):
-    """b = A solved and B not, c = A not and B solved; two-sided exact binomial on b | b+c, p = 1/2."""
-    nb, nc = int(np.sum(a & ~b)), int(np.sum(~a & b))
-    p = 1.0 if nb + nc == 0 else binomtest(nb, nb + nc, 0.5, alternative="two-sided").pvalue
-    return nb, nc, float(p)
-
-
-def bootstrap_index(n: int) -> np.ndarray:
-    """Fresh generator seeded 2026 for every statistic: the same 10 000 resamples of problems."""
-    return np.random.default_rng(SEED).integers(0, n, size=(N_BOOT, n))
-
-
-def paired_boot_diff(a: np.ndarray, b: np.ndarray):
-    idx = bootstrap_index(len(a))
-    d = a[idx].mean(axis=1) - b[idx].mean(axis=1)
-    lo, hi = np.percentile(d, [2.5, 97.5])
-    return float(lo), float(hi)
-
-
-def boot_ratio(num_: np.ndarray, solved: np.ndarray):
-    """Percentile CI of sum(num)/sum(solved); resamples with no solved problem are dropped."""
-    idx = bootstrap_index(len(num_))
-    s = solved[idx].sum(axis=1)
-    t = num_[idx].sum(axis=1)
-    ok = s > 0
-    if not ok.any():
-        return float("nan"), float("nan"), int((~ok).sum())
-    lo, hi = np.percentile(t[ok] / s[ok], [2.5, 97.5])
-    return float(lo), float(hi), int((~ok).sum())
-
-
-def boot_mean(x: np.ndarray):
-    idx = bootstrap_index(len(x))
-    lo, hi = np.percentile(x[idx].mean(axis=1), [2.5, 97.5])
-    return float(lo), float(hi)
-
-
-def quartiles(x):
-    q1, med, q3 = np.percentile(np.asarray(x, dtype=float), [25, 50, 75])
-    return float(med), float(q1), float(q3)
-
-
-# ----------------------------------------------------------------------------- per-row helpers
 def is_solved(cfg: str, r: dict) -> bool:
     return cfg != "C2" and r["status"] == "solved"
 
@@ -426,7 +373,7 @@ def comparison_rows(ctx, comps, corrected):
         row = [hid, f"{a} vs {b}", str(nb), str(nc), f"{100 * d:+.1f}"]
         if corrected:
             lo, hi = paired_boot_diff(solved[a].astype(float), solved[b].astype(float))
-            row += [f"[{100 * lo:+.1f}, {100 * hi:+.1f}]", pval(p), pval(min(1.0, 3 * p)), "yes" if p < ALPHA / 3 else "no"]
+            row += [f"[{100 * lo:+.1f}, {100 * hi:+.1f}]", pval(p), pval(bonferroni(p, len(PLANNED))), "yes" if bonferroni_reject(p, len(PLANNED)) else "no"]
         else:
             row += [pval(p)]
         rows.append(row)
@@ -641,6 +588,63 @@ def t_refinement(ctx, out, notes):
     if over:
         notes.append(f"C5 accepted plans with more than 3 attempts on a subgoal: {over}.")
     ctx["maxatt"] = maxatt
+    ctx["srk"] = {"srk": srk, "n": n, "p_hat": p_hat, "c4": k4}
+
+
+BLUE, ORANGE, INK, MUTED, GRID = "#2a78d6", "#eb6834", "#1f1f1e", "#5f5e58", "#e4e3de"  # validated pair (dataviz)
+
+
+def figure_srk(ctx, outdir: Path) -> list[Path]:
+    """Plan §7.5: SR(k) of C5 and Δ̂(k) against the independence curve of Eq. 14 (PDF + PNG).
+
+    Same quantities as Table 6: (a) SR_C5(k), k = 0..3, with Wilson 95 % CIs, and k = 1 from C4;
+    (b) Δ̂(k) = SR(k) − SR(k−1) (problem level) vs Δ(k) = p̂(1 − p̂)^(k−1) (subgoal level).
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    d = ctx["srk"]
+    srk, n, p_hat = d["srk"], d["n"], d["p_hat"]
+    ks = [0, 1, 2, 3]
+    sr = [100 * srk[k] / n for k in ks]
+    ci = [wilson(srk[k], n) for k in ks]
+    err = [[s - 100 * lo for s, (lo, _) in zip(sr, ci)], [100 * hi - s for s, (_, hi) in zip(sr, ci)]]
+    c4 = 100 * d["c4"] / n
+    c4_lo, c4_hi = wilson(d["c4"], n)
+    gain = [100 * (srk[k] - srk[k - 1]) / n for k in (1, 2, 3)]
+    indep = [100 * p_hat * (1 - p_hat) ** (k - 1) for k in (1, 2, 3)]
+
+    plt.rcParams.update({"font.family": "serif", "font.size": 8, "axes.edgecolor": MUTED, "axes.labelcolor": INK,
+                         "xtick.color": MUTED, "ytick.color": MUTED, "text.color": INK, "axes.linewidth": 0.6,
+                         "pdf.fonttype": 42})
+    fig, (a, b) = plt.subplots(1, 2, figsize=(3.5, 1.9), constrained_layout=True)
+    for ax in (a, b):
+        ax.grid(axis="y", color=GRID, linewidth=0.6)
+        ax.set_axisbelow(True)
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
+    a.errorbar(ks, sr, yerr=err, color=BLUE, marker="o", markersize=4, linewidth=1.5, elinewidth=0.8, capsize=2,
+               label="C5")
+    a.errorbar([1.12], [c4], yerr=[[c4 - 100 * c4_lo], [100 * c4_hi - c4]], color=ORANGE, marker="s",
+               markersize=4, linestyle="none", elinewidth=0.8, capsize=2, label="C4 (k = 1)")
+    a.set(xticks=ks, xlabel="k (max attempts per subgoal)", ylabel="SR (%)", ylim=(0, 100))
+    a.set_title("(a) SR(k)", fontsize=8)
+    a.legend(frameon=False, loc="upper left", fontsize=7, handlelength=1.2)
+    kk = [1, 2, 3]
+    b.plot(kk, gain, color=BLUE, marker="o", markersize=4, linewidth=1.5, label=r"$\hat\Delta(k)$, C5")
+    b.plot(kk, indep, color=ORANGE, marker="s", markersize=4, linewidth=1.5, linestyle="--",
+           label=r"$\hat p(1-\hat p)^{k-1}$")
+    b.set(xticks=kk, xlabel="k", ylabel="gain (pp)", ylim=(0, max(50, 10 * math.ceil(max(gain + indep) / 10))))
+    b.set_title("(b) marginal gain", fontsize=8)
+    b.legend(frameon=False, loc="upper right", fontsize=7, handlelength=1.6)
+    figdir = outdir / "figures"
+    figdir.mkdir(parents=True, exist_ok=True)
+    paths = [figdir / "srk_curve.pdf", figdir / "srk_curve.png"]
+    fig.savefig(paths[0], metadata={"CreationDate": None, "ModDate": None, "Producer": None, "Creator": None})
+    fig.savefig(paths[1], dpi=300, metadata={"Software": None})
+    plt.close(fig)
+    return paths
 
 
 def t_kappa(ctx, out):
@@ -722,16 +726,28 @@ def t_status(ctx, out, notes):
               "(degraded runs: see the runs table).", "infra", wide=True)
     try:
         import yaml
-        fid = (yaml.safe_load(open(ROOT / "data" / "curation" / "fidelity_review.yaml", encoding="utf-8")) or {}).get("notes") or {}
+        review = yaml.safe_load(open(ROOT / "data" / "curation" / "fidelity_review.yaml", encoding="utf-8")) or {}
     except Exception as exc:  # noqa: BLE001
-        fid = {}
+        review = {}
         notes.append(f"fidelity_review.yaml not read: {exc!r}")
-    rows = [[p, ", ".join(c for c in VERIFIED if is_solved(c, data[c][p])), "pending"]
+    fid = review.get("notes") or {}
+    post = review.get("post_test_review") or {}
+    verdicts = post.get("verdicts") or {}
+
+    def reviewed(p: str) -> str:
+        v = verdicts.get(p)
+        if v is None:
+            return "pending"
+        out_ = f"{post.get('date')}: {'counts as solved' if v.get('counts') else 'not counted as a solution'}"
+        return out_ + (f"; report note: {' '.join(str(v['report_note']).split())}" if v.get("report_note") else "; no note")
+
+    rows = [[p, ", ".join(c for c in VERIFIED if is_solved(c, data[c][p])), reviewed(p)]
             for p in ids if p in fid and any(is_solved(c, data[c][p]) for c in VERIFIED)]
     out.table("Table 10. Solved test problems with a fidelity note (plan §6)", ["Problem", "Solved by", "Manual review"],
               rows or [["—", "—", "—"]],
-              "Problems solved on test by some configuration that carry a note in data/curation/fidelity_review.yaml; each is "
-              "reviewed by hand before it is reported as a solution of the informal problem (verified SR unchanged).", "fidelity")
+              "Problems solved on test by some configuration that carry a note in data/curation/fidelity_review.yaml, and the "
+              "team's manual review (post_test_review in that file). The verified SR is unchanged by the review.", "fidelity",
+              align=r"llp{0.5\linewidth}")
     rows = []
     for p in ids:
         r2 = data["C2"][p]
@@ -800,7 +816,8 @@ def analyse(mode: str, outdir: Path) -> None:
     (outdir / "results.md").write_text(md, encoding="utf-8")
     head = "% Generated by docs/results/make_tables.py from runs/ (read-only). Needs only \\usepackage{booktabs}.\n\n"
     (outdir / "tables.tex").write_text(head + "\n".join(out.tex) + "\n", encoding="utf-8")
-    print(f"wrote {outdir / 'results.md'} and {outdir / 'tables.tex'}")
+    figs = figure_srk(ctx, outdir)
+    print(f"wrote {outdir / 'results.md'}, {outdir / 'tables.tex'} and {', '.join(str(f) for f in figs)}")
 
 
 def main() -> None:

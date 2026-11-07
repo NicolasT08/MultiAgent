@@ -57,7 +57,7 @@ from formal_mas.llm.specs import profile_name  # noqa: E402
 from formal_mas.lean.syntax_check import SyntaxChecker  # noqa: E402
 from formal_mas.orchestrator.graph import run_graph  # noqa: E402
 from formal_mas.retrieval.retriever import Retriever  # noqa: E402
-from formal_mas.run_config import build_run_config, write_run_config  # noqa: E402
+from formal_mas.run_config import build_run_config, run_start_info, write_run_config  # noqa: E402
 from formal_mas.tracing import Budget, Tracer, iso, utc_now  # noqa: E402
 
 CONFIGS = (*ABLATIONS, "PG")
@@ -166,6 +166,7 @@ def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipel
     ap.add_argument("--check", action="store_true",
                     help="C2 only: formalize every claimed proof to measure FPR_B (Eq. 16); see the docstring")
     args = ap.parse_args(argv)
+    start = run_start_info()  # git state and time at launch; run_config.json is rewritten at the end
     if args.check and args.config != "C2":
         ap.error("--check is only for C2 (Baseline B)")
 
@@ -226,7 +227,7 @@ def main(argv: list[str] | None = None, *, models_cfg: dict | None = None, pipel
     def config(**extra) -> dict:
         return build_run_config(run_id=run_id, config_name=args.config, seed=seed, dataset=args.data, split=split,
                                 llm_info=client.info(), lean_run_info=runner.run_info() if runner else None,
-                                pipeline_cfg=pipeline_cfg, argv=sys.argv,
+                                pipeline_cfg=pipeline_cfg, argv=sys.argv, start=start,
                                 extra={"spend": spend.info(), "flow": flow, **({"retriever": {"mode": retriever.mode,
                                                                                 "warnings": retriever.warnings}}
                                                                  if retriever is not None else {}),

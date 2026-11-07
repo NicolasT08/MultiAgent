@@ -17,35 +17,41 @@ experience but no Lean:
 - [What was tested and what came out](docs/results_explained.md): the dataset, the five
   configurations C1–C5, the results on `test` and their limitations.
 
-The rest of this README covers architecture details, installation, usage and reproduction.
+The rest of this README covers the architecture, the results, installation, usage and how to
+reproduce the experiments.
 
 ---
 
 ## 1. How the system works
 
-### 1.1 Target architecture
+### 1.1 Overview
 
-Given a problem stated as a Lean 4 theorem, the full system will run the loop
+Given a problem stated as a Lean 4 theorem (with its informal text), the system runs the loop
 
 ```
-PLAN → RETRIEVE → GENERATE → FORMALIZE → VERIFY → (CRITIC: retry / replan / give up) → DONE | FAIL
+PRE-PASS → PLAN → RETRIEVE → GENERATE → FORMALIZE → VERIFY → ASSEMBLE → DONE | FAIL
+                                   ↑                   │
+                                   └──── CRITIC ───────┘  (retry / replan / give up)
 ```
 
-- **Planner** proposes subgoals; the code (never an LLM) builds every Lean
-  statement and skeleton, so no model can weaken the theorem it must prove.
-- **Retriever** returns the *k* most useful Mathlib lemmas for each subgoal.
-- **Generator** writes *N* proof sketches (self-consistency) conditioned on those lemmas.
-- **Autoformalizer** turns a sketch into Lean tactics.
-- **Verifier** is deterministic: only the Lean kernel decides. A problem is solved
-  only if the proof compiles, contains no `sorry`, and `#print axioms` reports
-  nothing beyond `propext`, `Classical.choice` and `Quot.sound`.
-- **Critic** classifies errors with fixed rules and applies a deterministic policy,
-  under a hard budget of `b_max` LLM calls per problem.
+- **Pre-pass** tries a fixed list of standard tactics on the theorem, with no LLM call.
+- **Planner** proposes subgoals; the code (never an LLM) builds every Lean statement and
+  skeleton, so no model can weaken the theorem it must prove.
+- **Retriever** returns the *k* = 16 most useful Mathlib lemmas for each subgoal.
+- **Generator** writes *N* = 3 proof sketches per subgoal and votes on the strategy
+  (self-consistency).
+- **Autoformalizer** turns the winning sketch into Lean tactics.
+- **Verifier** is deterministic: only the Lean kernel decides. A problem is solved only if the
+  assembled proof compiles, contains no `sorry`, and `#print axioms` reports nothing beyond
+  `propext`, `Classical.choice` and `Quot.sound` (Eq. 2).
+- **Critic** classifies each failure with fixed rules (κ) and applies a deterministic policy
+  (π), under a hard budget of `b_max` = 40 LLM calls per problem.
 
-Five configurations (C1–C5: two baselines, no-RAG, no-Critic, full system) share the same
-compiled graph and differ only by flags in `config/ablations/`.
+The five configurations (C1–C5: two baselines, no-RAG, no-Critic, full system) share one
+compiled graph and differ only by flags in `config/ablations/`. Diagrams of the components,
+states and one retry are in [`docs/architecture.md`](docs/architecture.md).
 
-### 1.2 What works today: the Retriever (Phase 1)
+### 1.2 Retriever
 
 `Retriever.retrieve(subgoal)` maps a Lean subgoal to the top-*k* Mathlib lemmas:
 
@@ -62,14 +68,13 @@ compiled graph and differ only by flags in `config/ablations/`.
    `two_mul_le_add_sq` are not buried behind `Real.*` lemmas.
 5. **Fusion.** Reciprocal rank fusion (RRF, constant 60) of all rankings; the
    top *k* = 16 are returned as `LemmaHit(name, signature, score)`
-   (`src/formal_mas/agents/contracts.py`).
+   (`src/formal_mas/agents/contracts.py`). After a `missing_lemma` failure the Critic asks
+   for `k_retry` = 32.
 
 It also offers `suggest_names(ident)` to repair `unknown identifier` errors
 (`nat.succ_le_iff` → `Nat.succ_le_iff`), searching Mathlib plus the theorem names of
-Init/Std/Batteries.
-
-The Retriever **never raises**: without torch, FAISS or the dense index it falls
-back to BM25 only; without a lexical index it returns `[]`. Every degradation is
+Init/Std/Batteries. The Retriever **never raises**: without torch, FAISS or the dense index
+it falls back to BM25 only; without a lexical index it returns `[]`. Every degradation is
 logged as a JSON `retriever_warning` event.
 
 **Corpus.** Extracted from the elaborated Lean environment after `import Mathlib`
@@ -91,42 +96,11 @@ test was evaluated once:
 Full tables (BGE-base, BGE-M3, both gold definitions, LaTeX versions) are in
 `data/retrieval_eval/`.
 
-### 1.3 LLM client and baselines (Phase 3)
-
-Every LLM call goes through `formal_mas.llm.client.LLMClient`, one OpenAI-compatible
-client configured only by `config/models.yaml`:
-
-- **Profiles.** `dev` (default, free: Gemini `gemini-3.5-flash-lite`, falling back to
-  `gemini-3.8-flash`) is only for debugging code. `experiment` (paid: DeepSeek
-  `deepseek-flash` for every role) has no fallback model: after the retries with
-  backoff a problem is marked `provider_error`, which is not a system failure.
-- **Thinking.** On, with `reasoning_effort: low`, for planner, generator and
-  autoformalizer; off for the critic. Baseline A uses the Autoformalizer's settings and
-  Baseline B the Generator's (`same_as`), so the comparisons are fair.
-- **Budget.** At most `b_max` LLM calls per problem (`config/pipeline.yaml → budget`);
-  cache hits and the JSON repair call count, transport retries do not.
-- **Cache.** On disk (`data/llm_cache/`). The key covers the endpoint, the model, the full
-  request and the sample index, so the *N* self-consistency samples are different entries.
-- **JSON.** Outputs are parsed tolerantly (code fences, prose, trailing commas) and
-  validated against the Pydantic contracts. If parsing fails, the client makes one repair call.
-- **Trace.** One `llm_call` event per call in `trace.jsonl`. It records role, requested and
-  returned model, `system_fingerprint`, tokens (cache hit/miss, reasoning), cost at the
-  tariff in force at the call's UTC start (peak/off-peak), latency, timestamp, cache hit
-  and `finish_reason`.
-
-Baselines:
-
-- **C1 (Baseline A)** asks the LLM for a tactic block only. `statement.proof_file` builds
-  the file, `sanitize.py` checks the block (a rejection is a failed attempt, logged with
-  its reason) and the Lean runner decides. There are up to 4 independent samples.
-- **C2 (Baseline B)** asks for a natural-language proof and then a self-assessment by the
-  same model. It *claims* success when its own verdict is "correct". Lean never checks it.
-
-### 1.4 Planner and Generator (Phase 4)
+### 1.3 Planner and Generator
 
 - **Planner** (`agents/planner.py`, `prompts/planner.md`). Input: the formal statement,
   the informal one, and the Retriever's top-*k* lemmas for the theorem. The LLM returns
-  `PlanProposal` (`contracts.py`): at most `n_max` one-line Lean propositions (subgoals),
+  `PlanProposal` (`contracts.py`): at most `n_max` = 3 one-line Lean propositions (subgoals),
   a closing tactic block and a short rationale. The code checks every subgoal with
   `sanitize.check_term` and the closing block with `check_tactics`. Then, with Lean and no
   further LLM calls:
@@ -161,30 +135,31 @@ Baselines:
 - Neither node raises: unsafe Lean, invalid JSON, provider errors, budget exhaustion and
   spend stops become statuses in the result and events in the trace.
 
-### 1.5 Autoformalizer (Phase 5)
+### 1.4 Pre-pass, Autoformalizer and the sanitizers
 
-- **Two-layer sanitizer.** `lean/sanitize.py` (a blacklist over the text, offline) runs first.
-  Text that passes is then parsed by Lean's own parser in the REPL (`lean/syntax_check.py`):
-  a tactic block as `by` + block, a proposition as a term, nothing elaborated. Every syntax
-  node kind must be on a whitelist (the tactics olympiad proofs use, core term syntax except
-  quotations / `do` / `unsafe` / `sorry`, and notation terms). Anything else is rejected
+- **Two-layer sanitizer.** `lean/sanitize.py` (a blacklist over the text, offline) runs first:
+  it rejects `sorry`/`admit`, text that could escape its slot (command keywords, a line
+  indented to close the proof), metaprogramming, unsafe options, `IO`, `native_decide` and
+  Lean 3 syntax. Text that passes is then parsed by Lean's own parser in the REPL
+  (`lean/syntax_check.py`): a tactic block as `by` + block, a proposition as a term, nothing
+  elaborated. Every syntax node kind must be on a whitelist. Anything else is rejected
   (`parse`, `syntax`, `search`, …) before compiling. Identifiers are not node kinds, so names
-  such as `sorryAx` or `IO.*` are still the blacklist's job. One REPL command per check.
+  such as `sorryAx` or `IO.*` are still the blacklist's job.
 - **Pre-pass** (`agents/prepass.py`). Before any LLM call, every tactic of
   `pipeline.yaml → prepass.tactics` is tried alone on the theorem, in one compilation (one
   lemma per tactic, heartbeat limit each); the first that compiles is confirmed with
   `accepted`. After the plan, the same is done for every subgoal lemma. `prepass.enabled:
-  false` (or `run_eval.py --no-prepass`) turns it off for the ablation.
+  false` (or `run_eval.py --no-prepass`) turns it off.
 - **Autoformalizer** (`agents/autoformalizer.py`). Input: the subgoal lemma `<name>_sg<i>`
   (built by `statement.py`), the Generator's winning sketch and the Retriever's lemmas for
   that lemma. Output: only the tactic block. The prompt depends on the role's model
   (`models.yaml → prompt_style`): `chat` (`prompts/autoformalizer.md`, with the Lean 4 cheat
-  sheet `prompts/lean4_cheatsheet.md`, JSON `{"tactics"}`) or `prover`
-  (`prompts/autoformalizer_prover.md`, "Complete the following Lean 4 code" for whole-proof
-  models such as Goedel-Prover; only the tactics after `:= by` of the lemma are kept). The
-  block passes both sanitizer layers and the lemma must be *accepted*.
+  sheet `prompts/lean4_cheatsheet.md`, JSON `{"tactics"}`; used by every configured model)
+  or `prover` (`prompts/autoformalizer_prover.md`, for whole-proof prover models; only the
+  tactics after `:= by` of the lemma are kept). The block passes both sanitizer layers and
+  the lemma must be *accepted*.
 
-### 1.6 Critic and the state graph (Phase 6)
+### 1.5 Critic and the state graph
 
 - **Graph** (`orchestrator/graph.py`, LangGraph, one compiled `GRAPH`): pre-pass on the theorem →
   PLAN → pre-pass on the subgoals → per subgoal RETRIEVE → GENERATE → FORMALIZE → VERIFY → ASSEMBLE →
@@ -200,28 +175,110 @@ Baselines:
 - **Policy π** (Eq. 12, same file): abandon if `b ≥ b_max` or (`a_i ≥ k_max` and `r ≥ r_max`); replan
   if (`a_i ≥ k_max` or the class is `planning`) and `r < r_max`; otherwise retry: `syntax` → FORMALIZE
   (sketch kept), `missing_lemma` → RETRIEVE (identifier added to the query, `retrieval.k_retry`), any
-  other class → GENERATE. Both functions are pure, with no LLM.
+  other class → GENERATE. Both functions are pure, with no LLM. Defaults: `k_max` = 3 attempts per
+  subgoal, `r_max` = 1 replan per problem.
 - **Feedback** (`agents/critic.py`): deterministic by default (Lean's message with the goal state, the
   failed block, `Retriever.suggest_names` for a missing name). `critic.llm_feedback: true` (C3, C5) adds
   one LLM call of advice per retry; it counts for `b_max` and cannot change the action.
-- **Bound** (Proposition 1, Eq. 13): `C ≤ min{b_max, (r_max + 1)(1 + n_max · k_max · (N + 2))}`, tested with
-  random LLM and Lean behaviour (`tests/test_graph.py`). A JSON repair call counts for `b_max` but is
-  not in the structural term, so with repairs only `b_max` bounds the calls.
-- **Configurations** (`config/ablations/`): C1 `flow: baseline_a`, `b_max: 18` (C5's mean calls per problem on the
-  15 dev problems, final configuration); C2 `flow: baseline_b`; C3
-  `retrieval.enabled: false` (no lemmas, no name suggestions), Critic advice on; C4 `k_max: 1, r_max: 0`;
-  C5 the full system, Critic advice on.
-- **FPR_B** (Eq. 16): `python scripts/run_baseline_b.py --split dev --check` runs C2 and formalizes every
-  proof it claims (trivial plan, the claimed proof as the Autoformalizer's sketch, `k_max` attempts with the
-  Critic's deterministic feedback, no pre-pass; its own budget, apart from C2's calls, at most `k_max` × 2 = 6
-  calls per claim); FPR_B = claims Lean did not accept / claims checked. Lean start-up is checked with probes (`pipeline.yaml → lean.probes`); without Mathlib a
-  run stops before any LLM call (`lean_unavailable`).
+- **Bound** (Proposition 1, Eq. 13): `C ≤ min{b_max, (r_max + 1)(b_P + n_max · k_max · (N + 2))}`
+  (`policy.structural_bound`; = min{40, 92} = 40 with the defaults), tested with random LLM and Lean
+  behaviour (`tests/test_graph.py`). A JSON repair call counts for `b_max` but is not in the
+  structural term, so with repairs only `b_max` bounds the calls.
+
+### 1.6 LLM client
+
+Every LLM call goes through `formal_mas.llm.client.LLMClient`, one OpenAI-compatible
+client configured only by `config/models.yaml`:
+
+- **Profiles.** `dev` (default, free: Gemini `gemini-3.5-flash-lite`, falling back to
+  `gemini-3.8-flash`) is only for debugging code. `experiment` (paid: DeepSeek
+  `deepseek-flash` for every role) has no fallback model: after the retries with
+  backoff a problem is marked `provider_error`, which is not a system failure. All the
+  reported results use `experiment`.
+- **Thinking** (`experiment`). On, with `reasoning_effort: low` and `max_tokens` 32 768, for
+  planner, generator and autoformalizer; off for the critic. Baseline A uses the
+  Autoformalizer's settings and Baseline B the Generator's (`same_as`), so the comparisons are fair.
+- **Budget.** At most `b_max` LLM calls per problem (`config/pipeline.yaml → budget`);
+  cache hits and the JSON repair call count, transport retries do not.
+- **Cache.** On disk (`data/llm_cache/`). The key covers the endpoint, the model, the full
+  request and the sample index, so the *N* self-consistency samples are different entries.
+  An identical request is answered from the cache at no cost.
+- **JSON.** Outputs are parsed tolerantly (code fences, prose, trailing commas) and
+  validated against the Pydantic contracts. If parsing fails, the client makes one repair call.
+- **Trace.** One `llm_call` event per call in `trace.jsonl`. It records role, requested and
+  returned model, `system_fingerprint`, tokens (cache hit/miss, reasoning), cost at the
+  tariff in force at the call's UTC start (peak/off-peak), latency, timestamp, cache hit
+  and `finish_reason`.
+- **Spend caps** (`config/pipeline.yaml → spend`): every paid call is appended to
+  `data/spend_ledger.jsonl` (outside git). Before each paid request the client compares its
+  worst-case cost (every prompt byte as a cache-miss token plus all of `max_tokens` as
+  output, at the peak price) with `spend.total_usd` (whole project, 9 USD) and
+  `spend.run_usd` (one run, 3.5 USD). If it could pass either cap the request is not sent,
+  the problem is `budget_stop` and the run ends cleanly. `--run-usd` can only lower the
+  per-run cap.
+
+### 1.7 Baselines and the five configurations
+
+| | Flow and flags (`config/ablations/`) | What it is |
+|---|---|---|
+| **C1** Baseline A | `flow: baseline_a`, `b_max: 18`, `attempts: 18` | One LLM asked for the whole tactic block of the theorem; up to 18 independent attempts (no error feedback). `statement.proof_file` builds the file, both sanitizer layers check the block (a rejection is a failed attempt) and Lean decides. 18 = C5's mean calls per problem on the 15 `dev` problems, fixed before `test`. |
+| **C2** Baseline B | `flow: baseline_b` | Natural-language proof and a self-assessment by the same model; it *claims* success when its own verdict is "correct". Lean never checks it. |
+| **C3** No RAG | `retrieval.enabled: false`, `critic.llm_feedback: true` | Full system without lemmas or name suggestions. |
+| **C4** No Critic | `critic.k_max: 1`, `critic.r_max: 0` | Full system with one attempt per subgoal and no replanning. |
+| **C5** Full system | `critic.k_max: 3`, `critic.llm_feedback: true` | Every agent, retries and replanning. |
+
+**FPR_B** (Eq. 16): `python scripts/run_baseline_b.py --check` runs C2 and formalizes every
+proof it claims (trivial plan, the claimed proof as the Autoformalizer's sketch, `k_max`
+attempts with the Critic's deterministic feedback, the Retriever's lemmas as in C5, no
+pre-pass; its own budget, apart from C2's calls). FPR_B = claims Lean did not accept /
+claims checked. An unconfirmed claim may also be a formalization failure, so FPR_B is an
+upper bound; a manual review of 10 unconfirmed claims is in
+[`docs/results/fprb_review.md`](docs/results/fprb_review.md).
+
+Lean start-up is checked with probes (`pipeline.yaml → lean.probes`); without Mathlib a run
+stops before any LLM call (`lean_unavailable`).
 
 ---
 
-## 2. Repository structure
+## 2. Results at a glance
 
-Only files that exist today are listed.
+30 `test` problems (10 easy, 10 medium, 10 hard; algebra, number theory, combinatorics from
+miniF2F and PutnamBench), profile `experiment` (DeepSeek `deepseek-flash` for every role),
+seed 2026, one run per configuration. Analysis exactly as pre-registered in
+[`docs/analysis_plan.md`](docs/analysis_plan.md) (written before `test` was run). Source:
+[`docs/results/results.md`](docs/results/results.md), Tables 1 and 2.
+
+**Success rate** (proof accepted by Lean; 95 % Wilson intervals):
+
+| Config | Solved | SR | 95 % CI |
+|---|---|---|---|
+| C1 Baseline A | 20/30 | 66.7 % | [48.8, 80.8] |
+| C3 No RAG | 20/30 | 66.7 % | [48.8, 80.8] |
+| C4 No Critic | 14/30 | 46.7 % | [30.2, 63.9] |
+| C5 Full system | 24/30 | 80.0 % | [62.7, 90.5] |
+| C2 Baseline B | claimed 30/30; Lean confirmed 19 | FPR_B 36.7 % | [21.9, 54.5] |
+
+**Planned comparisons** (exact McNemar on the paired problems, Bonferroni × 3; *b* = solved
+only by C5, *c* = solved only by the other configuration):
+
+| | Comparison | b | c | ΔSR (pp) | Bootstrap 95 % CI (pp) | p | Adjusted p |
+|---|---|---|---|---|---|---|---|
+| H1 | C5 vs C1 | 4 | 0 | +13.3 | [+3.3, +26.7] | 0.125 | 0.375 |
+| H2 | C5 vs C3 (RAG) | 5 | 1 | +13.3 | [+0.0, +30.0] | 0.219 | 0.656 |
+| H3 | C5 vs C4 (Critic) | 10 | 0 | +33.3 | [+16.7, +50.0] | 0.002 | **0.006** |
+
+Only H3 is significant: the Critic's retries and replanning add 10 problems. With n = 30,
+H1 and H2 show no evidence of a difference, which is not evidence that there is none. C5
+used 16.9 LLM calls and 0.057 USD (nominal) per solved problem.
+
+More: [`docs/results_explained.md`](docs/results_explained.md) (plain-language summary and
+limitations) and [`docs/results/results.md`](docs/results/results.md) (every table: per-cell
+grid, efficiency, time, refinement curve SR(k), κ error taxonomy, method notes). LaTeX tables:
+`docs/results/tables.tex`; figure: `docs/results/figures/srk_curve.{pdf,png}`.
+
+---
+
+## 3. Repository structure
 
 ```
 formal-mas/
@@ -232,31 +289,36 @@ formal-mas/
 │
 ├── config/
 │   ├── models.yaml              # the ONLY place where models are named (providers, models, profiles)
-│   └── pipeline.yaml            # hyperparameters (retrieval, lean, budget, llm cache, baselines)
+│   ├── pipeline.yaml            # hyperparameters (retrieval, lean, budget, spend, critic, agents)
+│   └── ablations/               # C1_baseline_a, C2_baseline_b, C3_no_rag, C4_no_critic, C5_full (flags only)
 │
 ├── src/formal_mas/
-│   ├── config.py                # loads models.yaml and pipeline.yaml
+│   ├── config.py                # loads models.yaml and pipeline.yaml (+ ablation)
 │   ├── tracing.py               # trace.jsonl writer and the per-problem budget (b_max)
 │   ├── run_config.py            # runs/<run>/run_config.json (RNF-2)
+│   ├── evalset.py               # pools, seeded draw and stratified split of data/eval.jsonl
 │   ├── llm/
 │   │   ├── client.py            # OpenAI-compatible client: budget, cache, retries, JSON, trace
 │   │   ├── specs.py             # resolves and validates a profile of models.yaml
 │   │   ├── pricing.py           # usage normalisation and cost (peak / off-peak)
 │   │   └── spend.py             # spend caps and the ledger of real spend
 │   ├── agents/
-│   │   ├── contracts.py         # Pydantic I/O contracts (LemmaHit, PlanProposal, SketchProposal, …)
+│   │   ├── contracts.py         # Pydantic I/O contracts (→ docs/schemas/)
 │   │   ├── prompting.py         # loads prompts/*.md (SYSTEM:/USER:, {{placeholders}})
+│   │   ├── prepass.py           # fixed automatic tactics before any LLM call
 │   │   ├── planner.py           # subgoals + closing step; skeleton, refutation, closing checked, else trivial plan
 │   │   ├── generator.py         # N sketches per subgoal, strategy vote (Eq. 9)
-│   │   ├── autoformalizer.py    # subgoal lemma + sketch + lemmas → tactic block (chat / prover style)
-│   │   └── prepass.py           # fixed automatic tactics before any LLM call
+│   │   ├── autoformalizer.py    # subgoal lemma + sketch + lemmas → tactic block
+│   │   └── critic.py            # feedback for retry / replan (deterministic, optional LLM advice)
 │   ├── orchestrator/
 │   │   ├── graph.py             # the LangGraph state graph shared by C1–C5
-│   │   └── policy.py            # classifier κ (Eq. 11) and policy π (Eq. 12): rules, no LLM
+│   │   └── policy.py            # classifier κ (Eq. 11), policy π (Eq. 12), call bound (Eq. 13)
 │   ├── baselines/
 │   │   ├── baseline_a.py        # C1: LLM writes the tactic block, Lean verifies
-│   │   └── baseline_b.py        # C2: natural-language proof + self-assessment (unverified)
-│   ├── prompts/                 # one .md per prompt
+│   │   └── baseline_b.py        # C2: natural-language proof + self-assessment; FPR_B check
+│   ├── analysis/
+│   │   └── stats.py             # Wilson, exact McNemar, Bonferroni, bootstrap (analysis plan)
+│   ├── prompts/                 # one .md per prompt + lean4_cheatsheet.md
 │   ├── lean/
 │   │   ├── runner.py            # compiles Lean (REPL, fallback per file), acceptance (Eq. 2)
 │   │   ├── sanitize.py          # rejects unsafe generated Lean (escapes, metaprogramming, IO…)
@@ -282,48 +344,62 @@ formal-mas/
 │   ├── kaggle_job.py            # embeds the corpus on a free Kaggle GPU
 │   ├── kaggle_embed.py          # the Kaggle kernel itself (runs on Kaggle)
 │   ├── eval_retrieval.py        # Recall@k / MRR of every method
-│   └── run_eval.py              # runs a configuration (C1–C5; PG = Phase 4 preview) over a dataset
+│   ├── fetch_eval_sources.sh    # downloads the pinned miniF2F port and PutnamBench → data/raw/
+│   ├── build_eval_set.py        # builds data/eval.jsonl (seeded draw, compile with sorry)
+│   ├── run_eval.py              # runs a configuration (C1–C5; PG = Planner/Generator preview) over a dataset
+│   └── run_baseline_b.py        # C2 with --check (FPR_B)
 │
 ├── lean_project/                # Lean 4 + Mathlib project (pinned versions)
 ├── lean_repl/                   # Lean REPL clone + build (generated, not in git)
 ├── data/
+│   ├── README.md                # how eval.jsonl was built
 │   ├── smoke.jsonl              # 5 trivial hand-written problems for smoke runs
-│   ├── dev_preview.jsonl        # 5 medium miniF2F problems for Planner/Generator previews (dev only)
-│   ├── eval.jsonl               # evaluation set: 45 problems, 15 dev / 30 test (see data/README.md)
-│   ├── curation/                # selection criteria, discarded problems, fidelity review
+│   ├── dev_preview.jsonl        # 5 medium miniF2F problems for previews (dev only)
+│   ├── eval.jsonl               # evaluation set: 45 problems, 15 dev / 30 test
+│   ├── curation/                # selection criteria, discarded problems, fidelity review (+ post-test review)
 │   ├── raw/                     # pinned sources of eval.jsonl (not in git)
 │   ├── retrieval_eval/          # Q (q_dev.jsonl, q_test.jsonl) and evaluation results
 │   ├── index/                   # generated corpus and indexes (not in git)
-│   └── llm_cache/               # LLM response cache (not in git)
+│   ├── llm_cache/               # LLM response cache (not in git)
+│   └── spend_ledger.jsonl       # every paid call (not in git)
 ├── runs/                        # one folder per run (not in git)
-├── docs/prompt_log.md           # log of prompt changes and their measured effect
+├── docs/
+│   ├── how_it_works.md          # plain-language explanation with a real example
+│   ├── results_explained.md     # plain-language results and limitations
+│   ├── architecture.md          # component, state and sequence diagrams
+│   ├── analysis_plan.md         # pre-registered analysis plan + Deviations
+│   ├── prompt_log.md            # log of prompt changes and their measured effect (dev only)
+│   ├── schemas/                 # JSON Schemas of the agent contracts
+│   ├── results/                 # tables (results.md, tables.tex), figures/, make_tables.py, fprb_review.md
+│   └── report/                  # the report (PDF)
 └── tests/                       # offline unit tests (+ slow Lean integration tests)
 ```
 
-`data/index/`, `data/llm_cache/`, `data/spend_ledger.jsonl`, `runs/`, `lean_project/.lake/`, `lean_repl/`
-and `.env` are git-ignored.
+`data/index/`, `data/llm_cache/`, `data/spend_ledger.jsonl`, `data/raw/`, `runs/`,
+`lean_project/.lake/`, `lean_repl/` and `.env` are git-ignored.
 
 ---
 
-## 3. Installation
+## 4. Installation
 
 Tested on Windows 11 (Git Bash) with Python 3.12; the scripts also work on Linux and macOS.
 
-### 3.1 Requirements
+### 4.1 Requirements
 
 - Python ≥ 3.10 (the project uses 3.12 in `.venv/`)
-- [uv](https://docs.astral.sh/uv/) (creates the Python environment, §3.2)
+- [uv](https://docs.astral.sh/uv/) (creates the Python environment, §4.2)
 - Git and `curl`
 - ~7 GB of disk for Lean 4 + Mathlib, plus ~3 GB for the indexes
+- ~4 GB of free RAM for the Lean REPL (Mathlib loaded)
 
-### 3.2 Python environment
+### 4.2 Python environment
 
 ```bash
 uv venv --python 3.12 .venv
 source .venv/Scripts/activate        # Windows (Git Bash); on Linux/macOS: .venv/bin/activate
-pip install torch --index-url https://download.pytorch.org/whl/cpu   # CPU-only torch
-pip install -r requirements.txt
-pip install -e .
+uv pip install torch --index-url https://download.pytorch.org/whl/cpu   # CPU-only torch
+uv pip install -r requirements.txt
+uv pip install -e .
 ```
 
 On Windows, set `PYTHONUTF8=1` so the console handles Lean symbols (ℝ, ⊢, ≤).
@@ -331,7 +407,7 @@ On Windows, set `PYTHONUTF8=1` so the console handles Lean symbols (ℝ, ⊢, �
 API keys go in `.env` (copy `.env.example`; never commit it): `GEMINI_API_KEY` for the
 free `dev` profile, `DEEPSEEK_API_KEY` for the paid `experiment` profile.
 
-### 3.3 Lean 4 + Mathlib
+### 4.3 Lean 4 + Mathlib
 
 ```bash
 bash scripts/setup_lean.sh
@@ -362,7 +438,7 @@ The ~30 s assumes the Mathlib `.olean` files (~6 GB) are in the OS file cache. C
 on a hard disk, the first `import Mathlib` can take ~30 min (random reads of memory-
 mapped files); keep `lean_project/` on an SSD if possible.
 
-### 3.4 Lean REPL (proof checking back-end)
+### 4.4 Lean REPL (proof checking back-end)
 
 ```bash
 bash scripts/build_repl.sh
@@ -373,7 +449,7 @@ Clones [leanprover-community/repl](https://github.com/leanprover-community/repl)
 `lean_project/`) into `lean_repl/`, checks the pinned commit and builds it (~1 min).
 Without it the runner falls back to `lake env lean` per file (~32 s per check).
 
-### 3.5 Retrieval data
+### 4.5 Retrieval data
 
 The indexes are not versioned, so they must be rebuilt once. The reference set Q
 is already in `data/retrieval_eval/`.
@@ -405,9 +481,9 @@ are uploaded.
 
 ---
 
-## 4. Usage
+## 5. Usage
 
-### 4.1 Retrieving lemmas
+### 5.1 Retrieving lemmas
 
 ```python
 from formal_mas.retrieval.retriever import Retriever
@@ -425,7 +501,7 @@ r.suggest_names("nat.succ_le_iff")    # ['Nat.succ_le_iff', …]
 Start-up takes ~14 s on CPU (model and indexes load once); a query takes ~200 ms
 median.
 
-### 4.2 Checking proofs with Lean
+### 5.2 Checking proofs with Lean
 
 ```python
 from formal_mas.lean.runner import LeanRunner, accepted
@@ -442,15 +518,16 @@ with LeanRunner() as lean:            # reads config/pipeline.yaml → lean
 The first call starts the REPL and loads the base imports once (~33 s warm); later
 checks take ~0.01–0.5 s. `accepted` implements Eq. 2: Lean finished, no errors, no
 `sorry`, the theorem's axioms ⊆ {`propext`, `Classical.choice`, `Quot.sound`}, and the
-code declared nothing but the theorem (and Lean's auxiliaries for it).
-Hangs (`timeout`, final), memory blow-ups (`memory_limit`) and REPL crashes (`crash`) kill
+code declared nothing but the theorem (and Lean's auxiliaries for it). After the import
+the REPL must answer `#check` probes of Mathlib and Aesop (`lean.probes`), so a REPL that
+started without Mathlib is never used.
+Hangs (`timeout`), memory blow-ups (`memory_limit`) and REPL crashes (`crash`) kill
 the process tree and restart the REPL before the next check; if the REPL cannot start, the
 runner uses `lake env lean --json` per file, logs a `lean_runner_warning` event and marks
-the run as degraded (`lean.run_info()`, to be stored in `run_config.json`). Identical
-checks are answered from an in-memory cache.
+the run as degraded (`run_config.json`). Identical checks are answered from an in-memory cache.
 
 Generated Lean never touches the statement: `statement.py` builds every file and pastes
-only model-written tactic blocks and subgoal propositions, after `sanitize.py` checks them.
+only model-written tactic blocks and subgoal propositions, after the sanitizers check them.
 
 ```python
 from formal_mas.lean.statement import assemble, parse_theorem, skeleton, subgoal_lemma
@@ -463,7 +540,7 @@ final = assemble(thm, subgoals, ["positivity", "rw [h₁]\nnorm_num"], "nlinarit
 # unsafe text (e.g. "exact h\ntheorem evil : False := sorry") raises statement.UnsafeLean
 ```
 
-### 4.3 Evaluating retrieval
+### 5.3 Evaluating retrieval
 
 ```bash
 python scripts/eval_retrieval.py                     # dev split, every built index
@@ -475,72 +552,65 @@ Results are written to `data/retrieval_eval/results_<split>.{json,md,tex}`.
 Model and *k* selection must use the dev split only; the test split is reserved for
 the final numbers.
 
-### 4.4 Running the configurations
+### 5.4 Running a configuration
 
 ```bash
+# free profile (Gemini), for debugging
+MODEL_PROFILE=dev python scripts/run_eval.py --config C5 --split dev --limit 3 --echo
 MODEL_PROFILE=dev python scripts/run_eval.py --config C1 --data data/smoke.jsonl --echo
-MODEL_PROFILE=dev python scripts/run_eval.py --config C2 --data data/smoke.jsonl --limit 3
+MODEL_PROFILE=dev python scripts/run_baseline_b.py --split dev --limit 3 --check --echo
 # Planner + Generator only (plans and sketches, no proof); not an experimental configuration
 MODEL_PROFILE=dev python scripts/run_eval.py --config PG --data data/dev_preview.jsonl --echo
-# The full system and its ablations; --no-prepass forces the LLM path
-MODEL_PROFILE=dev python scripts/run_eval.py --config C5 --data data/dev_preview.jsonl --echo
-MODEL_PROFILE=dev python scripts/run_eval.py --config C3 --data data/dev_preview.jsonl --echo
+# --no-prepass forces the LLM path
 MODEL_PROFILE=dev python scripts/run_eval.py --config C4 --data data/smoke.jsonl --no-prepass --echo
 ```
 
-Each run writes `runs/<UTC time>_<config>_<profile>/`:
+Options: `--config` (C1–C5, PG), `--data` (default `data/eval.jsonl`), `--split`
+(`dev` | `test` | `all`), `--limit`, `--seed`, `--run-name` (suffix of the run folder),
+`--echo`, `--run-usd` (lower the per-run spend cap), `--no-prepass`, `--check` (C2 only).
+
+Each run writes `runs/<UTC time>_<config>_<profile>[_<run-name>]/`:
 
 - `run_config.json`: exact role specs, the models and fingerprints the provider returned,
-  seed, Lean toolchain and Mathlib revision, `LeanRunner.run_info()` (incl. `degraded`),
-  RAG index metadata, dataset hash, git commit and uncommitted changes. It is written at
-  the start and rewritten at the end.
+  seed, Lean toolchain and Mathlib revision, Lean runner info (incl. `degraded`), RAG index
+  metadata, dataset path and sha256, package versions, and the git commit and uncommitted
+  changes **at launch** (`git`, `created_utc`). It is written at the start and rewritten at
+  the end with the status and summary; the git state at that moment goes to `git_end`
+  (`written_utc`).
 - `trace.jsonl`: one event per line, covering LLM calls, retries, attempts, Lean checks and warnings.
 - `results.jsonl`: one line per problem with status, stage, `error_classes`, `critiques`, replans,
-  LLM calls, tokens, cost and `length` finishes.
+  the accepted proof, LLM calls, tokens, cost (real and nominal) and wall time.
+- `console.log`: everything the run printed.
 
-`experiment` runs are paid and need the team's explicit permission. `run_eval.py` warns
-(without blocking) when a run starts inside DeepSeek's peak-price window (01:00–04:00
-and 06:00–10:00 UTC, Monday–Friday). The client warns when the first response's `model`
-differs from `expected_version` in `models.yaml`.
+`experiment` runs are paid. `run_eval.py` warns (without blocking) when a run starts inside
+DeepSeek's peak-price window (01:00–04:00 and 06:00–10:00 UTC, Monday–Friday), and the
+client warns when the first response's `model` differs from `expected_version` in
+`models.yaml`. It prints the project's spend and what is left at the start and the run's
+cost at the end.
 
-**Spend caps** (`config/pipeline.yaml` → `spend`): every paid call is appended to
-`data/spend_ledger.jsonl` (outside git) with its date, run, problem, role and computed
-cost. Before each paid request the client compares its worst-case cost (every prompt
-byte as a cache-miss token plus all of `max_tokens` as output, at the peak price) with `spend.total_usd`
-(whole project, sum of the ledger) and `spend.run_usd` (this run). If it could pass
-either cap the request is not sent, the problem is `budget_stop` and the run ends
-cleanly (`run_config.json` status `budget_stop`). `run_eval.py` prints the project's
-spend and what is left at the start and the run's cost at the end; `--run-usd` can only
-lower the per-run cap. Because the check uses the worst case, a run stops a little before
-its cap is actually reached.
-
-### 4.5 Configuration
+### 5.5 Configuration
 
 - **Models** are defined only in `config/models.yaml`: `providers` (endpoint and the
   environment variable of the key), `models` (id, `expected_version`, JSON mode, how to
-  toggle thinking, prices and peak windows), and `profiles` (role → model and request
-  parameters; `same_as` copies a role). Never write model names in code. To change the
-  embedding model, edit `embeddings.selected` (and rebuild its index).
+  toggle thinking, prices and peak windows, `prompt_style`), and `profiles` (role → model
+  and request parameters; `same_as` copies a role). Never write model names in code. To
+  change the embedding model, edit `embeddings.selected` (and rebuild its index).
 - **Control flow** lives in `config/pipeline.yaml`: `flow`, `critic.k_max`, `critic.r_max`,
   `critic.llm_feedback`, and each configuration's overrides in `config/ablations/`.
-- **Budget, spend, cache and baselines** live in `config/pipeline.yaml`: `budget.b_max`,
-  `spend.total_usd`, `spend.run_usd`, `spend.ledger`, `llm.cache`, `llm.cache_dir`,
-  `llm.json_repair`, `baselines.*.attempts`, `run.seed`.
-- **Planner, Generator, Autoformalizer and pre-pass** live in `config/pipeline.yaml` →
-  `planner` (`n_max`, `retrieve`, `check_skeleton`, `refute` and `closing_auto`: `enabled`,
-  `tactics`, `heartbeats`, `timeout_s`), `generator` (`samples` = *N*, `retrieve`),
-  `autoformalizer` (`retrieve`) and `prepass` (`enabled`, `tactics`, `heartbeats`,
-  `timeout_s`). The Autoformalizer's prompt style is the role's model's
-  `models.yaml → prompt_style` (`chat` | `prover`).
-- **Retrieval hyperparameters** live in `config/pipeline.yaml` → `retrieval`:
-  `method` (`rrf` | `bm25` | `dense`), `k`, `depth`, `rrf_k`, `query_instruction`,
-  `generic_query`, `index_dir`, `suggestions`.
-- **Lean runner** settings live in `config/pipeline.yaml` → `lean`: `backend`
-  (`repl` | `file`), `base_imports`, `timeout_s`, `startup_timeout_s`, `restart_every`,
-  `restart_memory_mb`, `kill_memory_mb`, `cache_size`, `syntax_check` and
-  `syntax_timeout_s` (the parser layer of the sanitizer).
+- **Budget, spend, cache and baselines**: `budget.b_max`, `spend.total_usd`, `spend.run_usd`,
+  `spend.ledger`, `llm.cache`, `llm.cache_dir`, `llm.json_repair`, `baselines.*.attempts`,
+  `run.seed`.
+- **Agents**: `planner` (`n_max`, `retrieve`, `check_skeleton`, `refute` and `closing_auto`:
+  `enabled`, `tactics`, `heartbeats`, `timeout_s`), `generator` (`samples` = *N*,
+  `retrieve`), `autoformalizer` (`retrieve`) and `prepass` (`enabled`, `tactics`,
+  `heartbeats`, `timeout_s`).
+- **Retrieval**: `retrieval` → `enabled`, `method` (`rrf` | `bm25` | `dense`), `k`, `k_retry`,
+  `depth`, `rrf_k`, `query_instruction`, `generic_query`, `index_dir`, `suggestions`.
+- **Lean runner**: `lean` → `backend` (`repl` | `file`), `probes`, `base_imports`,
+  `timeout_s`, `startup_timeout_s`, `restart_every`, `restart_memory_mb`, `kill_memory_mb`,
+  `cache_size`, `syntax_check` and `syntax_timeout_s`.
 
-### 4.6 Tests
+### 5.6 Tests
 
 ```bash
 pytest              # offline unit tests (toy corpus, fake encoder, fake REPL, fake LLM, recorded Lean outputs)
@@ -552,14 +622,76 @@ them with `python scripts/capture_lean_fixtures.py` when the Lean version change
 
 ---
 
-## 5. Reproducibility
+## 6. Reproducing the experiments
+
+### 6.1 Regenerating the tables and the figure from `runs/`
+
+The run folders are not in git (`runs/` is git-ignored); place the eight `test` run folders
+listed in `docs/results/results.md` ("Runs used") under `runs/`, plus
+`data/spend_ledger.jsonl` for the real-cost columns. Then, from the repository root:
+
+```bash
+pytest tests/test_stats.py                            # the statistics against known values
+python docs/results/make_tables.py                    # → docs/results/results.md, tables.tex, figures/srk_curve.{pdf,png}
+python docs/results/make_tables.py --dev /tmp/devout  # optional: the same code on dev runs (plan §7)
+```
+
+`make_tables.py` only reads `runs/`, `data/eval.jsonl`, the ledger and
+`data/curation/fidelity_review.yaml`. The run folders and how interrupted runs are merged
+(one row per problem) are fixed in `TEST_SOURCES`, `C1_MERGED` and `DISCARDED` at the top of
+the script, following the Deviations section of `docs/analysis_plan.md`. Two runs of the
+script produce byte-identical files.
+
+### 6.2 Running C1–C5 again
+
+These are the commands used for the reported runs (`argv` in each `run_config.json`), in
+the order they were run. Before any paid run: a clean tree, `pytest` green, nothing else
+loading Lean, and a free `dev` smoke run.
+
+```bash
+# 0. checks
+pytest
+MODEL_PROFILE=dev python scripts/run_eval.py --config C5 --split dev --limit 3 --echo
+
+# 1–5. the five configurations on test (paid; DEEPSEEK_API_KEY in .env), off-peak
+MODEL_PROFILE=experiment python scripts/run_eval.py --config C5 --split test --echo --run-usd 1.50
+MODEL_PROFILE=experiment python scripts/run_eval.py --config C4 --split test --echo --run-usd 0.40
+MODEL_PROFILE=experiment python scripts/run_eval.py --config C3 --split test --echo --run-usd 2.00
+MODEL_PROFILE=experiment python scripts/run_baseline_b.py --split test --check --echo --run-usd 1.00
+MODEL_PROFILE=experiment python scripts/run_eval.py --config C1 --split test --echo --run-usd 3.50
+
+# 6. tables: point TEST_SOURCES / C1_MERGED in docs/results/make_tables.py to the new run folders
+python docs/results/make_tables.py
+```
+
+Nominal cost of the reported runs (no cache): C5 1.36, C4 0.39, C3 1.35, C2 with the check
+0.71, C1 2.57 USD, about 6.4 USD in all, under the 9 USD project cap. C4 is C5 with retries
+removed, so right after C5 its requests are answered from the LLM cache (its real cost was
+0); without that cache, raise C4's `--run-usd` above its nominal cost. Without
+`data/llm_cache/` the model samples again and the results will differ from run to run: the
+reported numbers are one sample of each configuration. With the cache, every request is
+answered from disk and the runs replay at no cost.
+
+If a run is interrupted, follow the procedure in `docs/analysis_plan.md` (Deviations): write
+the missing lines of `data/eval.jsonl`, unchanged and in order, to a new file and run only
+those with `--data <file> --run-name resume` and the same configuration; the problem that
+was cut runs from scratch.
+
+---
+
+## 7. Reproducibility notes
 
 - Lean and Mathlib versions are pinned in `lean_project/`; the Lean REPL tag and commit
   are pinned in `scripts/build_repl.sh` (`runner.repl_env_info()` reports them).
 - Index metadata (`data/index/*/<model>/meta.json`, `data/retrieval_eval/meta.json`)
   records the model, Hugging Face revision, precision, corpus hash and Mathlib commit.
-- The reference set split uses seed 2026, stratified by area.
-- Every run stores `runs/<run>/run_config.json` (see §4.4). DeepSeek offers no versioned
+- `data/eval.jsonl` is rebuilt by `scripts/fetch_eval_sources.sh` (pinned commits) and
+  `scripts/build_eval_set.py` (seeded draw); see `data/README.md`.
+- The reference set split, the run seed and the bootstrap use seed 2026.
+- Every run stores `runs/<run>/run_config.json` (see §5.4). DeepSeek offers no versioned
   model id: `deepseek-flash` is an alias (it has already moved from V4-Flash to
   V4.1-Flash), and the API echoes the alias as `model`, so the `system_fingerprint` of
   every response (recorded with `model`) is the only per-call trace of the underlying model.
+- Operational incidents during the `test` runs (two interrupted runs and their resumes, spend
+  caps raised, the order C4 before C3, `dirty: true` in four `run_config.json` files) are
+  recorded in `docs/analysis_plan.md` → Deviations. None changed code, prompts or configuration.

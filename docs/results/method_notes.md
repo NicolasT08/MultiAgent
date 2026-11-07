@@ -5,15 +5,19 @@ had to be read literally or was silent, or a fact found in the data.
 
 ### Analysis code
 
-1. **The planned analysis code does not exist.** Plan §7 says the analysis lives in
-   `src/formal_mas/analysis/stats.py` and `scripts/compare.py`. Neither file is in the repository. Writing
-   under `src/` and `scripts/` was not allowed here, so the statistics are implemented in
-   `docs/results/make_tables.py`. Exact binomial tests and Wilson intervals come from `scipy.stats.binomtest`
-   (Wilson without continuity correction). The bootstrap uses `numpy.random.default_rng`. The κ classifier is
-   imported read-only from `src/formal_mas/orchestrator/policy.py`.
+1. **Analysis code.** Plan §7 places the statistics in `src/formal_mas/analysis/stats.py`. The first version of
+   this analysis implemented them inside `docs/results/make_tables.py` (the file did not exist yet); on
+   2026-11-07, by team decision, they were moved to `src/formal_mas/analysis/stats.py` (Wilson, exact McNemar,
+   Bonferroni, bootstrap, quartiles), with offline tests against closed-form values in `tests/test_stats.py`.
+   `make_tables.py` imports them, and the regenerated `results.md` and `tables.tex` were checked to be byte for
+   byte identical to the earlier output (before Table 10 was switched to the post-test fidelity review). Exact binomial tests and Wilson intervals come from
+   `scipy.stats.binomtest` (Wilson without continuity correction). The bootstrap uses
+   `numpy.random.default_rng`. The κ classifier is imported read-only from `src/formal_mas/orchestrator/policy.py`.
+   `scripts/compare.py` was not written: `make_tables.py` produces every table of §7.
 2. **Dev before test (plan §7).** The script was first run in `--dev` mode on dev runs, using stand-ins on the
    same 15 dev problems, and checked there: Wilson 11/15 = [48.0, 89.1], exact McNemar p values computed by
-   hand, and the C1 κ classification on `20261103T161957Z_C1_experiment_c1_cost`. There are no unit tests.
+   hand, and the C1 κ classification on `20261103T161957Z_C1_experiment_c1_cost`. Unit tests of the statistics
+   were added later (item 1).
    Disclosure: before the script existed, the analyst had seen the first `test` row of C5 (`mathd_algebra_206`,
    solved) and the summaries stored in the `run_config.json` of the C5 resume runs and of C4, while checking the
    configurations. After the first `test` run, the script changed in three ways: (a) C2 wall time now stops at
@@ -112,7 +116,9 @@ had to be read literally or was silent, or a fact found in the data.
     counting every LLM-attempted subgoal of every plan (including abandoned plans and failed problems). The curve
     reported is Eq. 14's per-subgoal marginal gain Δ(k) = p̂(1 − p̂)^(k−1). It sits at a different level
     (subgoal) from the problem-level Δ̂(k). The last two columns of Table 6 give the subgoal-level empirical
-    counterpart and are supplementary. The plan asks for a figure; only the table is produced here.
+    counterpart and are supplementary. The figure the plan asks for (§7.5) is
+    `docs/results/figures/srk_curve.pdf` (and `.png`), drawn from the same numbers: (a) SR_C5(k), k = 0..3, with
+    Wilson CIs and C4 at k = 1; (b) Δ̂(k) against p̂(1 − p̂)^(k−1).
 
 ### Error taxonomy (§4.5)
 
@@ -135,8 +141,9 @@ had to be read literally or was silent, or a fact found in the data.
 29. C1 `budget_exhausted` rows (7) reached b_max = 18 calls after 9–17 recorded attempts, because JSON-repair
     calls count against the budget. The 3 `failed` C1 rows used all 18 attempts.
 30. **Fidelity (§6).** Four solved test problems carry a fidelity note: `amc12b_2003_p6`, `mathd_algebra_234`,
-    `mathd_algebra_455` and `putnam_1965_b2`. Their manual review (PLAN.md Phase 9) is pending. The verified SR is
-    reported unchanged, as §6 requires.
+    `mathd_algebra_455` and `putnam_1965_b2`. The team reviewed them on 2026-11-07 (`post_test_review` in
+    `data/curation/fidelity_review.yaml`; Table 10): all four count as solved, `amc12b_2003_p6` with a note in the
+    report. The verified SR is reported unchanged, as §6 requires.
 31. **Supplementary, not in the plan:** Table 8 (pre-pass vs LLM `solved_by`) and Table 4d.
 
 ### Illustrative traces (for the appendix)

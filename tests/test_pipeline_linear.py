@@ -322,6 +322,9 @@ def test_run_eval_c4(tmp_path, monkeypatch):
     spec = importlib.util.spec_from_file_location("run_eval_lin", ROOT / "scripts" / "run_eval.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
+    launch = {"created_utc": "LAUNCH", "git": {"commit": "abc", "dirty": False, "changed_files": []}}
+    calls = []
+    monkeypatch.setattr(mod, "run_start_info", lambda: calls.append(1) or launch)
     data = tmp_path / "p.jsonl"
     data.write_text(json.dumps({**PROBLEM, "split": "dev"}) + "\n", encoding="utf-8")
     clock = FakeClock()
@@ -354,7 +357,11 @@ def test_run_eval_c4(tmp_path, monkeypatch):
     row = json.loads((run_dir / "results.jsonl").read_text(encoding="utf-8"))
     assert row["status"] == "solved" and row["solved"] is True and row["stage"] == "assemble"
     assert row["llm"]["llm_calls"] == 7 and "have h2 : y = 2" in row["proof"]
-    assert json.loads((run_dir / "run_config.json").read_text(encoding="utf-8"))["summary"]["solved"] == 1
+    cfg_out = json.loads((run_dir / "run_config.json").read_text(encoding="utf-8"))
+    assert cfg_out["summary"]["solved"] == 1
+    # The final rewrite keeps the launch's git state and time (taken once); git_end is the end's.
+    assert calls == [1] and cfg_out["git"] == launch["git"] and cfg_out["created_utc"] == "LAUNCH"
+    assert "git_end" in cfg_out and cfg_out["written_utc"] != "LAUNCH"
 
 
 def test_run_eval_stops_before_any_llm_call_without_lean(tmp_path, monkeypatch):
