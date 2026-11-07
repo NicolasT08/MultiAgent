@@ -211,6 +211,10 @@ No deviation from the analysis itself. Infrastructure incidents during the `test
   same procedure as for C5 (same frozen configuration, seed and cache; input file with exactly the
   needed lines of `data/eval.jsonl`; `imo_1987_p6` run from scratch, its earlier spend counted in the
   project's real cost but in no kept row).
+  The resume run is `20261107T200233Z_C1_experiment_resume` (commit `2c8eae5`, clean tree; input
+  sha256 `009bece56dc0fdde3c814c9e81aeda6ee7bd8dd677d0fa29bab5dd723c907b8b`, the 7 problems in
+  dataset order; `--run-usd 1.65` = 3.50 minus the 1.8407 USD C1 had spent, rounded down, so that
+  C1 as a whole stays under 3.50).
 
 Clarifications written before any run on `test`:
 
