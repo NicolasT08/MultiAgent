@@ -134,6 +134,30 @@ the SR both with and without that problem.
 Analysis code (`src/formal_mas/analysis/stats.py`, `scripts/compare.py`) is written in Phase 9 to
 implement exactly this plan; it is tested on `dev` runs before it reads any `test` result.
 
+## Exploratory analysis (post hoc, decided 2026-11-08)
+
+Decided after all confirmatory `test` runs and their analysis were finished. It is exploratory
+and changes no result, test or conclusion of §2–§7.
+
+- **Motivation.** The hard problems look limited by the model rather than by the method: C1 and
+  C5 solve the same 4 of the 10 hard `test` problems (`imo_1964_p1_2`, `imo_1965_p2`,
+  `putnam_1964_b2`, `putnam_1965_b2`), so the agents add nothing on that stratum with
+  DeepSeek-Flash.
+- **Run.** C5 exactly as frozen for the main runs (same graph, prompts, `pipeline.yaml` method
+  settings, seed, `B_max`/`b_max`), with model profile `experiment_pro`: identical to
+  `experiment` except that every role uses `deepseek-v4-pro` instead of `deepseek-flash`
+  (`config/models.yaml`). Input: the 10 hard `test` problems, all of them (not only those C5-Flash
+  failed), as a file with exactly those lines of `data/eval.jsonl` in dataset order; its sha256 and
+  id list go in `run_config.json`. One run, `--run-usd 5.00`; if it ends in `budget_stop` it is not
+  resumed and the problems without a complete row are reported as not attempted.
+- **Reported.** A descriptive paired table, problem by problem, C5-Flash (the kept rows of the
+  main C5 `test` result, §Deviations) vs C5-Pro on the same 10 problems: solved, LLM calls,
+  cost (real and nominal), wall time in minutes; plus totals. The 2×2 table of solved/not solved
+  may be shown as counts.
+- **Not done.** No hypothesis test, CI or p-value; nothing is added to the Bonferroni family; no
+  claim about Pro beyond these 10 problems. Pro's results never replace C5's in any main table.
+- **Fidelity.** Any new success gets the same manual fidelity check as §6 before it is reported.
+
 ## Deviations
 
 No deviation from the analysis itself. Infrastructure incidents during the `test` runs:
@@ -230,6 +254,16 @@ No deviation from the analysis itself. Infrastructure incidents during the `test
   Fixed after all `test` runs (`run_config.run_start_info`): `git` and `created_utc` now describe
   the launch, and the state when the file is written goes to `git_end` and `written_utc`. Runs
   already made are not rewritten.
+
+- **2026-11-08, spend caps raised for the exploratory C5-Pro run (spend control).** Team decision,
+  after all confirmatory `test` runs. Only `config/pipeline.yaml → spend` changed: `total_usd`
+  9.0 → 12.5 and `run_usd` 3.5 → 5.0. The ledger stood at 7.36 USD; re-pricing C5-Flash's tokens on
+  the 10 hard `test` problems at Pro prices gives about 3.75 USD off-peak (7.49 USD at peak), so the
+  old caps would stop the run. As before, the caps are checked before each paid request and only
+  decide whether it is sent; no prompt, model of the main profiles, budget `B_max`/`b_max`, policy
+  or result changes, and no confirmatory run is repeated. The run uses `--run-usd 5.00`. The
+  offline test that pins the configured caps
+  (`tests/test_spend.py::test_real_pipeline_yaml_has_the_caps`) was updated to the new values.
 
 Clarifications written before any run on `test`:
 
