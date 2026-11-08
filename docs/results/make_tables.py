@@ -780,6 +780,86 @@ def t_hard(ctx, out):
               "hard", note=note, align="ll" + "c" * (len(VERIFIED) + 1))
 
 
+# Post hoc exploratory run (docs/analysis_plan.md, "Exploratory analysis (post hoc, decided 2026-11-08)"
+# and its Deviations entry): C5 with profile experiment_pro on the 10 hard test problems, stopped by the team.
+PRO_RUN = "20261108T130803Z_C5_experiment_pro_pro_hard"
+# Team decision 2026-11-08: none of these counts as a failure of Pro (they are left out of its solved count).
+PRO_PROVIDER_ERROR_LABEL = "provider_error (connection drop, not a system failure)"
+PRO_INTERRUPTED = ["imo_1984_p6"]
+PRO_NOT_ATTEMPTED = ["imo_1964_p1_2", "putnam_1964_b2", "putnam_1995_b1", "putnam_1965_b2"]
+
+
+def t_pro_hard(ctx, out, notes):
+    """Post hoc, exploratory paired table C5-Flash vs C5-Pro on the hard test problems (descriptive only)."""
+    ids, flash, meta = ctx["ids"], ctx["data"]["C5"], ctx["meta"]
+    hard = [p for p in ids if meta[p]["difficulty"] == "hard"]
+    pro = {r["problem_id"]: r for r in read_jsonl(RUNS / PRO_RUN / "results.jsonl")}
+    rc = json.load(open(RUNS / PRO_RUN / "run_config.json", encoding="utf-8"))
+    assert rc["profile"] == "experiment_pro" and rc["config"] == "C5" and sorted(rc["problems"]) == sorted(hard)
+    trace = load_traces(PRO_RUN)
+    for p in PRO_INTERRUPTED:
+        assert p not in pro and trace.get(p), f"{p}: expected a started problem with no row"
+    for p in PRO_NOT_ATTEMPTED:
+        assert p not in pro and not trace.get(p), f"{p}: expected no row and no trace events"
+    assert set(pro) | set(PRO_INTERRUPTED) | set(PRO_NOT_ATTEMPTED) == set(hard)
+    led, led_n = ledger_index()
+
+    def fmt(r):
+        L = r["llm"]
+        return [str(L["llm_calls"]), num(L["cost_usd_nominal"], 4), num(r["wall_s"] / 60, 1)]
+
+    rows, comparable = [], []
+    for p in hard:
+        f = flash[p]
+        left = [p, "1" if is_solved("C5", f) else "0"] + fmt(f)
+        if p in PRO_NOT_ATTEMPTED:
+            right = ["not attempted", "—", "—", "—", "—"]
+        elif p in PRO_INTERRUPTED:
+            right = ["interrupted", "—", "—", "—", "—"]
+        elif pro[p]["status"] == "provider_error":
+            right = [PRO_PROVIDER_ERROR_LABEL, "—"] + fmt(pro[p])
+        else:
+            right = [pro[p]["status"], "1" if is_solved("C5", pro[p]) else "0"] + fmt(pro[p])
+            comparable.append(p)
+        rows.append(left + right)
+
+    def tot(R, ps):
+        return [str(sum(R[p]["llm"]["llm_calls"] for p in ps)), num(sum(R[p]["llm"]["cost_usd_nominal"] for p in ps), 4),
+                num(sum(R[p]["wall_s"] for p in ps) / 60, 1)]
+    fs = lambda ps: f"{sum(is_solved('C5', flash[p]) for p in ps)}/{len(ps)}"  # noqa: E731
+    rows += ["MIDRULE",
+             [f"Both finished ({len(comparable)})", fs(comparable)] + tot(flash, comparable)
+             + ["", f"{sum(is_solved('C5', pro[p]) for p in comparable)}/{len(comparable)}"] + tot(pro, comparable),
+             [f"All hard ({len(hard)})", fs(hard)] + tot(flash, hard) + ["", "—", "—", "—", "—"]]
+    run_real = sum(v for (run, _), v in led.items() if run == PRO_RUN)
+    run_calls = sum(v for (run, _), v in led_n.items() if run == PRO_RUN)
+    cut = {p: (led.get((PRO_RUN, p), 0.0), led_n.get((PRO_RUN, p), 0),
+               (_ts(trace[p][-1]) - _ts(trace[p][0])).total_seconds() / 60) for p in PRO_INTERRUPTED}
+    ledger_total = sum(led.values())
+    note = ("Post hoc, exploratory (decided 2026-11-08, after all confirmatory runs): descriptive only, no tests, no "
+            "intervals; it changes no main result. C5-Flash = the kept C5 rows of the main test result; C5-Pro = run "
+            f"{PRO_RUN} (profile experiment_pro: deepseek-v4-pro in every role, everything else as frozen), stopped by "
+            "the team and not resumed. Cost is nominal USD (cache hits priced as fresh calls). "
+            f"{PRO_PROVIDER_ERROR_LABEL.split(' (')[0]}, interrupted and not attempted do not count as failures of Pro and "
+            "are left out of its solved count; only problems both runs finished are compared. "
+            + "; ".join(f"{p} was interrupted after {n} paid calls ({v:.4f} USD real, {m:.1f} min) and left no row"
+                        for p, (v, n, m) in cut.items())
+            + f". Real cost of the Pro run: {run_real:.4f} USD ({run_calls} paid calls, all in the ledger); "
+              f"project ledger total: {ledger_total:.4f} USD.")
+    out.table("Table 12. Exploratory: C5-Flash vs C5-Pro on the hard problems (post hoc, descriptive, not in the analysis plan)",
+              ["Problem", "Flash solved", "Flash calls", "Flash USD", "Flash min",
+               "Pro outcome", "Pro solved", "Pro calls", "Pro USD", "Pro min"], rows,
+              "Exploratory, post hoc: C5 with DeepSeek-Flash vs DeepSeek-V4-Pro on the hard test problems (descriptive).",
+              "pro-hard", note=note, wide=True, align="lcccclcccc")
+    nf, npro = (sum(R[p]["llm"]["cost_usd_nominal"] for p in comparable) for R in (flash, pro))
+    wf, wpro = (sum(R[p]["wall_s"] for p in comparable) for R in (flash, pro))
+    out.text(f"**Pro vs Flash on the {len(comparable)} problems both finished:** {num(npro / nf, 2)} × the nominal cost "
+             f"and {num(wpro / wf, 2)} × the wall time.\n\n"
+             f"**Project spend (ledger, all runs):** main experiments (every run except the exploratory Pro run, `dev` "
+             f"included) {ledger_total - run_real:.4f} USD; exploratory Pro run {run_real:.4f} USD; total "
+             f"{ledger_total:.4f} USD.")
+
+
 def t_candidates(ctx, out, notes):
     ids, data, s = ctx["ids"], ctx["data"], lambda c, p: is_solved(c, ctx["data"][c][p])
     cand = {
@@ -829,6 +909,8 @@ def analyse(mode: str, outdir: Path) -> None:
     t_prepass(ctx, out)
     t_status(ctx, out, notes)
     t_hard(ctx, out)
+    if mode == "test":
+        t_pro_hard(ctx, out, notes)
     t_candidates(ctx, out, notes)
     out.text("## Generated data notes\n\n" + "\n".join(f"- {x}" for x in notes))
     outdir.mkdir(parents=True, exist_ok=True)

@@ -402,7 +402,9 @@ How to read it:
 - **RNF-3** (at most 20 LLM calls per solved problem for C5) is **met**: 406/24 = 16.92.
 - C1 has a budget of 18 calls per problem (the average C5 used on `dev`, by a rule fixed before
   `test`); the full system has 40.
-- **Project spend** (all runs, `dev` included): 7.3596 USD of the 9 USD cap.
+- **Project spend** (ledger, all runs, `dev` included): main experiments 7.3596 USD. Including the
+  exploratory Pro run (1.9407 USD, §14): 9.3003 USD in total; the project cap was raised from 9 to
+  12.5 USD for that run (§11).
 
 ### 7.4 Medians and quartiles
 
@@ -580,9 +582,11 @@ from the plan was operational, and each item is logged with date and reason in
 2. **C4 ran before C3** (plan order: C5, C3, C4, C2, C1). For schedule and cost reasons only.
    Every configuration still ran once on the same problems, so the paired comparisons are not
    affected.
-3. **The per-run spend cap was raised twice** (to 2 USD before C3, then to 3.5 USD before C1), by
-   team decision, so that those runs would not stop half-way. The cap only decides whether a
-   request is sent; it does not change prompts, models, call budgets or results.
+3. **The per-run spend cap was raised twice for the main runs** (to 2 USD before C3, then to
+   3.5 USD before C1), by team decision, so that those runs would not stop half-way. The cap only
+   decides whether a request is sent; it does not change prompts, models, call budgets or results.
+   For the exploratory Pro run (§14, after all main runs) both caps were raised again: the project
+   cap from 9 to 12.5 USD and the per-run cap from 3.5 to 5 USD.
 4. **C1 was stopped by the team (2026-11-05)** to free the machine, after 23 of 30 problems. The
    other 7 were completed on 2026-11-07 in a resume run with the same procedure as C5, and the
    pieces were merged into one file (checked row by row).
@@ -590,6 +594,8 @@ from the plan was operational, and each item is logged with date and reason in
    configuration file was rewritten at the end of each run and read the git state at that moment;
    the only changed file was `analysis_plan.md` itself, edited during the runs to log these
    incidents. Every tree was clean at launch. The recording was fixed after the `test` runs.
+6. **The exploratory Pro run was stopped by the team (2026-11-08)** after 5 of its 10 problems and
+   not resumed (§14). It is outside the analysis plan's results and changes none of them.
 
 Written before any `test` run, as a clarification rather than a deviation: **how the C2 claim
 check works** (plan §4.2): each claimed proof becomes a sketch for the Autoformalizer, with up to
@@ -711,9 +717,67 @@ of §11 (the plan requires reporting them as deviations).
   formal or human verification.
 - **Data:** only public benchmarks (miniF2F, PutnamBench) were used, with no personal data; cite
   their sources and licences, and mention the contamination risk (§12).
-- **Cost and resources:** the whole project spent 7.3596 USD of a 9 USD cap (§7.3), with a
-  response cache that avoided repeated calls; this keeps the work reproducible on a student
-  budget.
+- **Cost and resources:** Main experiments (dev + test, C1–C5): 7.36 USD. Including the
+  exploratory Pro run: 9.30 USD in total; the project cap was raised from 9 to 12.5 USD for that
+  run (see Deviations). A response cache avoided repeated calls; this keeps the work reproducible
+  on a student budget.
 - **Transparency and reproducibility:** the analysis plan was written before the `test` runs,
   every deviation is logged (§11), post hoc analyses are labelled, and each run records its
   models, seed and Lean/Mathlib versions.
+
+## 14. Exploratory: a stronger model on the hard problems
+
+*Post hoc (decided 2026-11-08, after all confirmatory runs), descriptive · LaTeX `tab:pro-hard`.*
+This section changes no result of §4–§12. It is logged in `analysis_plan.md` ("Exploratory
+analysis (post hoc, decided 2026-11-08)" and two Deviations entries of that date).
+
+**Why.** On the hard tier the agents add nothing with DeepSeek-Flash: C1 and C5 solve exactly the
+same 4 hard problems (§5.3). That suggests the hard problems are limited by the model, not by the
+method. To look at that, C5 was run again on the 10 hard `test` problems with a stronger model,
+DeepSeek-V4-Pro, in every role (profile `experiment_pro`); everything else (graph, prompts,
+budgets, seed) was the frozen C5 configuration.
+
+**What happened to the run.** The team stopped it after 5 of the 10 problems
+(`20261108T130803Z_C5_experiment_pro_pro_hard`) and it was not resumed. Three outcomes are
+**not failures of Pro** and are left out of its solved count:
+
+- `imo_1978_p5`: **provider_error (connection drop, not a system failure)**. The 30th call of the
+  problem (the Autoformalizer on subgoal 1) never reached DeepSeek: all 5 transport attempts got
+  `APIConnectionError: Connection error.` with no HTTP response (15:34:50–15:37:28 UTC). The next
+  problem connected normally.
+- `imo_1984_p6`: **interrupted**, cut mid-problem by the stop (4 paid calls, no row).
+- `imo_1964_p1_2`, `putnam_1964_b2`, `putnam_1995_b1`, `putnam_1965_b2`: **not attempted**.
+
+Only the 4 problems that both runs finished are compared (`imo_1965_p2`, `imo_1979_p1`,
+`imo_1987_p6`, `imo_1993_p5`).
+
+### Table 12. Exploratory: C5-Flash vs C5-Pro on the hard problems (post hoc, descriptive, not in the analysis plan)
+
+| Problem | Flash solved | Flash calls | Flash USD | Flash min | Pro outcome | Pro solved | Pro calls | Pro USD | Pro min |
+|---|---|---|---|---|---|---|---|---|---|
+| imo_1964_p1_2 | 1 | 15 | 0.0261 | 3.4 | not attempted | — | — | — | — |
+| imo_1965_p2 | 1 | 14 | 0.0312 | 3.7 | failed | 0 | 30 | 0.3608 | 33.6 |
+| imo_1978_p5 | 0 | 31 | 0.1347 | 39.6 | provider_error (connection drop, not a system failure) | — | 30 | 0.2938 | 40.7 |
+| imo_1979_p1 | 0 | 28 | 0.1463 | 19.7 | failed | 0 | 24 | 0.2722 | 29.3 |
+| imo_1984_p6 | 0 | 32 | 0.3366 | 27.6 | interrupted | — | — | — | — |
+| imo_1987_p6 | 0 | 36 | 0.1793 | 21.4 | budget_exhausted | 0 | 40 | 0.4607 | 57.4 |
+| imo_1993_p5 | 0 | 27 | 0.0790 | 10.6 | failed | 0 | 24 | 0.3807 | 53.6 |
+| putnam_1964_b2 | 1 | 9 | 0.0160 | 2.3 | not attempted | — | — | — | — |
+| putnam_1965_b2 | 1 | 17 | 0.0409 | 4.9 | not attempted | — | — | — | — |
+| putnam_1995_b1 | 0 | 25 | 0.1268 | 17.5 | not attempted | — | — | — | — |
+| Both finished (4) | 1/4 | 105 | 0.4357 | 55.5 |  | 0/4 | 118 | 1.4744 | 173.9 |
+| All hard (10) | 4/10 | 234 | 1.1169 | 150.9 |  | — | — | — | — |
+
+*Note.* Post hoc, exploratory (decided 2026-11-08, after all confirmatory runs): descriptive only, no tests, no intervals; it changes no main result. C5-Flash = the kept C5 rows of the main test result; C5-Pro = run 20261108T130803Z_C5_experiment_pro_pro_hard (profile experiment_pro: deepseek-v4-pro in every role, everything else as frozen), stopped by the team and not resumed. Cost is nominal USD (cache hits priced as fresh calls). provider_error, interrupted and not attempted do not count as failures of Pro and are left out of its solved count; only problems both runs finished are compared. imo_1984_p6 was interrupted after 4 paid calls (0.1725 USD real, 18.1 min) and left no row. Real cost of the Pro run: 1.9407 USD (151 paid calls, all in the ledger); project ledger total: 9.3003 USD.
+
+In plain words: on the 4 problems both runs finished, Pro solved none and Flash solved one
+(`imo_1965_p2`, which Pro failed after 30 calls). Pro spent about 3.4 times as much (1.47 vs
+0.44 USD nominal) and took about 3.1 times as long (174 vs 56 min) on those 4. This does **not**
+show that a stronger model fails to help: only 4 of the 10 problems were compared, each model
+ran once, and 3 of the 4 hard problems Flash solved were never attempted by Pro. The question of
+whether the hard tier is limited by the model stays open; the report can mention the run as an
+exploratory, incomplete check and should not draw a conclusion from it.
+
+**Cost.** The Pro run cost 1.9407 USD real (151 paid calls, all off-peak). With it, the project
+ledger stands at 9.3003 USD; for this run the caps were raised to 12.5 USD in total and 5 USD per
+run (Deviations, 2026-11-08).

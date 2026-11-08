@@ -265,6 +265,23 @@ No deviation from the analysis itself. Infrastructure incidents during the `test
   offline test that pins the configured caps
   (`tests/test_spend.py::test_real_pipeline_yaml_has_the_caps`) was updated to the new values.
 
+- **2026-11-08, exploratory C5-Pro run stopped by the team (operational incident).** Run
+  `20261108T130803Z_C5_experiment_pro_pro_hard` (commit `8f72b02`, clean tree, profile
+  `experiment_pro`, `--run-usd 5.00`; input sha256 `acfd3825…26cf7a66`, the 10 hard `test`
+  problems in dataset order) was stopped on purpose at about 17:23 UTC, together with its whole
+  process tree (REPL, `lake`), because the team had to leave. No code, prompt, model or
+  configuration changed; all calls were off-peak. 5 of 10 problems finished and are kept
+  unchanged: `imo_1965_p2`, `imo_1993_p5`, `imo_1979_p1` (`failed`), `imo_1987_p6`
+  (`budget_exhausted`) and `imo_1978_p5` (`provider_error`: the Autoformalizer request on subgoal 1,
+  the problem's 30th call, got `APIConnectionError: Connection error.` with no HTTP response on all
+  5 transport attempts, 15:34:50–15:37:28 UTC). The 6th (`imo_1984_p6`) was cut mid-problem after 4
+  calls and left no row. The last 4 (`imo_1964_p1_2`, `putnam_1964_b2`, `putnam_1995_b1`,
+  `putnam_1965_b2`) were not attempted. The run is **not resumed** and the `provider_error` is
+  **not re-run**: the exploratory table reports the 5 finished rows, the cut problem and the 4
+  not attempted as such. Real cost 1.9407 USD (151 paid calls; 0.1725 USD of it on the cut
+  problem, in no kept row); ledger total after the run 9.3003 USD. `run_config.json` still shows
+  `status: running` because the run never reached its final rewrite.
+
 Clarifications written before any run on `test`:
 
 - **2026-11-03, FPR_B check (§4.2), how "the Autoformalizer–Verifier loop with the same budget" is

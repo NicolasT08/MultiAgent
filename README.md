@@ -627,14 +627,21 @@ them with `python scripts/capture_lean_fixtures.py` when the Lean version change
 ### 6.1 Regenerating the tables and the figure from `runs/`
 
 The run folders are not in git (`runs/` is git-ignored); place the eight `test` run folders
-listed in `docs/results/results.md` ("Runs used") under `runs/`, plus
+listed in `docs/results/results.md` ("Runs used") under `runs/`, plus the exploratory run
+`20261108T130803Z_C5_experiment_pro_pro_hard` (Table 12, post hoc) and
 `data/spend_ledger.jsonl` for the real-cost columns. Then, from the repository root:
 
 ```bash
 pytest tests/test_stats.py                            # the statistics against known values
 python docs/results/make_tables.py                    # → docs/results/results.md, tables.tex, figures/srk_curve.{pdf,png}
+python docs/results/check_explained.py                # every number in docs/results_explained.md matches results.md
 python docs/results/make_tables.py --dev /tmp/devout  # optional: the same code on dev runs (plan §7)
 ```
+
+`check_explained.py` fails (exit code 1, one line per mismatch) if a table copied into
+`docs/results_explained.md` is not verbatim, a note differs, or a number in the text does not
+appear in `results.md` at the precision shown. Run it after every `make_tables.py` run and
+every edit of `results_explained.md`.
 
 `make_tables.py` only reads `runs/`, `data/eval.jsonl`, the ledger and
 `data/curation/fidelity_review.yaml`. The run folders and how interrupted runs are merged

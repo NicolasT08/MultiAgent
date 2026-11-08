@@ -497,3 +497,33 @@ Solved &  & 4/10 & 4/10 & 1/10 & 4/10 &  \\
 \parbox{\linewidth}{\scriptsize Post hoc, descriptive (not in the analysis plan): no tests, no intervals. 1 = verified solved. C1 and C5 solve the same hard problems (4 and 4); 5 hard problems are solved by no configuration (imo\_1978\_p5, imo\_1979\_p1, imo\_1984\_p6, imo\_1987\_p6, putnam\_1995\_b1); C3 and C5 solve 4 and 4 hard problems, but only C3 solves imo\_1993\_p5 and only C5 solves putnam\_1964\_b2.}
 \end{table}
 
+\begin{table*}[t]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\caption{Exploratory, post hoc: C5 with DeepSeek-Flash vs DeepSeek-V4-Pro on the hard test problems (descriptive).}
+\label{tab:pro-hard}
+\begin{tabular}{lcccclcccc}
+\toprule
+Problem & Flash solved & Flash calls & Flash USD & Flash min & Pro outcome & Pro solved & Pro calls & Pro USD & Pro min \\
+\midrule
+imo\_1964\_p1\_2 & 1 & 15 & 0.0261 & 3.4 & not attempted & --- & --- & --- & --- \\
+imo\_1965\_p2 & 1 & 14 & 0.0312 & 3.7 & failed & 0 & 30 & 0.3608 & 33.6 \\
+imo\_1978\_p5 & 0 & 31 & 0.1347 & 39.6 & provider\_error (connection drop, not a system failure) & --- & 30 & 0.2938 & 40.7 \\
+imo\_1979\_p1 & 0 & 28 & 0.1463 & 19.7 & failed & 0 & 24 & 0.2722 & 29.3 \\
+imo\_1984\_p6 & 0 & 32 & 0.3366 & 27.6 & interrupted & --- & --- & --- & --- \\
+imo\_1987\_p6 & 0 & 36 & 0.1793 & 21.4 & budget\_exhausted & 0 & 40 & 0.4607 & 57.4 \\
+imo\_1993\_p5 & 0 & 27 & 0.0790 & 10.6 & failed & 0 & 24 & 0.3807 & 53.6 \\
+putnam\_1964\_b2 & 1 & 9 & 0.0160 & 2.3 & not attempted & --- & --- & --- & --- \\
+putnam\_1965\_b2 & 1 & 17 & 0.0409 & 4.9 & not attempted & --- & --- & --- & --- \\
+putnam\_1995\_b1 & 0 & 25 & 0.1268 & 17.5 & not attempted & --- & --- & --- & --- \\
+\midrule
+Both finished (4) & 1/4 & 105 & 0.4357 & 55.5 &  & 0/4 & 118 & 1.4744 & 173.9 \\
+All hard (10) & 4/10 & 234 & 1.1169 & 150.9 &  & --- & --- & --- & --- \\
+\bottomrule
+\end{tabular}
+
+\vspace{2pt}
+\parbox{\linewidth}{\scriptsize Post hoc, exploratory (decided 2026-11-08, after all confirmatory runs): descriptive only, no tests, no intervals; it changes no main result. C5-Flash = the kept C5 rows of the main test result; C5-Pro = run 20261108T130803Z\_C5\_experiment\_pro\_pro\_hard (profile experiment\_pro: deepseek-v4-pro in every role, everything else as frozen), stopped by the team and not resumed. Cost is nominal USD (cache hits priced as fresh calls). provider\_error, interrupted and not attempted do not count as failures of Pro and are left out of its solved count; only problems both runs finished are compared. imo\_1984\_p6 was interrupted after 4 paid calls (0.1725 USD real, 18.1 min) and left no row. Real cost of the Pro run: 1.9407 USD (151 paid calls, all in the ledger); project ledger total: 9.3003 USD.}
+\end{table*}
+
