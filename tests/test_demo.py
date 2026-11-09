@@ -588,3 +588,12 @@ def test_bare_latex_answer_is_put_in_math_mode():
     assert catalog.clean_informal(r"Show that it is \frac{25}{8}.") == r"Show that it is $\frac{25}{8}$."
     assert catalog.clean_informal("Show that it is 23.") == "Show that it is 23."
     assert catalog.clean_informal(r"Show that it is $\sqrt 2$.") == r"Show that it is $\sqrt 2$."
+
+
+def test_results_tables_are_contiguous_markdown_tables():
+    data = json.loads((replay.REPLAY_DIR / "results.json").read_text(encoding="utf-8"))
+    md = catalog.results_markdown(data, "es")
+    blocks = md.split("\n\n")
+    tables = [b for b in blocks if b.startswith("|")]
+    assert len(tables) == 2 and all("\n|---|" in b for b in tables)
+    assert all(len(b.splitlines()) >= 4 for b in tables)  # header, rule and rows in one block

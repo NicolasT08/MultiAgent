@@ -159,15 +159,16 @@ def results_markdown(data: dict | None, lang: str) -> str:
     if not data:
         return t(lang, "res.missing")
     sr = {r["config"]: r for r in data.get("sr") or []}
-    out = [t(lang, "res.intro"), f"### {t(lang, 'res.t1.title')}",
-           f"| {t(lang, 'res.t1.version')} | {t(lang, 'res.t1.solved')} | {t(lang, 'res.t1.pct')} | {t(lang, 'res.t1.range')} |",
-           "|---|---|---|---|"]
+    out = [t(lang, "res.intro"), f"### {t(lang, 'res.t1.title')}"]
+    table = [f"| {t(lang, 'res.t1.version')} | {t(lang, 'res.t1.solved')} | {t(lang, 'res.t1.pct')} | {t(lang, 'res.t1.range')} |",
+             "|---|---|---|---|"]  # a Markdown table: rows joined by single newlines
     for cfg in ("C5", "C1", "C3", "C4"):
         if cfg in sr:
             r = sr[cfg]
             name = f"**{t(lang, f'cfg.{cfg}')}**" if cfg == "C5" else t(lang, f"cfg.{cfg}")
-            out.append(f"| {name} | {t(lang, 'res.t1.of', solved=r['solved'], n=r['n'])} | {r['pct']:.0f} % | "
-                       f"{r['ci'][0]:.0f}–{r['ci'][1]:.0f} % |")
+            table.append(f"| {name} | {t(lang, 'res.t1.of', solved=r['solved'], n=r['n'])} | {r['pct']:.0f} % | "
+                         f"{r['ci'][0]:.0f}–{r['ci'][1]:.0f} % |")
+    out.append("\n".join(table))
     if "C5" in sr and "C4" in sr:
         out.append("\n" + t(lang, "res.t1.read", best=sr["C5"]["solved"], n=sr["C5"]["n"],
                             no_critic=t(lang, "res.t1.of", solved=sr["C4"]["solved"], n=sr["C4"]["n"])))
@@ -178,11 +179,12 @@ def results_markdown(data: dict | None, lang: str) -> str:
                   pct=f"{c2['not_confirmed_pct']:.0f}")]
     tests = data.get("tests") or []
     if tests:
-        out += [f"### {t(lang, 'res.t2.title')}",
-                f"| {t(lang, 'res.t2.cmp')} | {t(lang, 'res.t2.diff')} | {t(lang, 'res.t2.clear')} |", "|---|---|---|"]
+        out.append(f"### {t(lang, 'res.t2.title')}")
+        table = [f"| {t(lang, 'res.t2.cmp')} | {t(lang, 'res.t2.diff')} | {t(lang, 'res.t2.clear')} |", "|---|---|---|"]
         for h in tests:
             clear = t(lang, "res.t2.yes" if h["significant"] else "res.t2.no", p=f"{h['p_adj']:.3f}")
-            out.append(f"| {t(lang, 'cmp.' + h['id'])} | {t(lang, 'res.t2.points', d=h['delta_pp'])} | {clear} |")
+            table.append(f"| {t(lang, 'cmp.' + h['id'])} | {t(lang, 'res.t2.points', d=h['delta_pp'])} | {clear} |")
+        out.append("\n".join(table))
         sig = [h for h in tests if h["significant"]]
         out.append("\n" + (t(lang, "res.t2.read", clear=t(lang, f"cmp.{sig[0]['id']}.short")) if len(sig) == 1
                            else t(lang, "res.t2.read_none") if not sig
