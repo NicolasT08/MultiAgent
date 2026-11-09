@@ -5,7 +5,12 @@ with chains of reasoning, retrieval-augmented generation (RAG) over Mathlib, and
 **formal verification in Lean 4**. Final project of the Artificial Intelligence
 course, UPTC Sogamoso.
 
-Team: Andrés Felipe Mongui Torres and Nicolás Samuel Tinjacá Topia.
+Team: Andrés Felipe Mongui Torres and Nicolás Samuel Tinjacá Topia. License: MIT (`LICENSE`).
+
+**On Hugging Face:**
+- Code: https://huggingface.co/NicolasT08/formal-mas
+- Evaluation set, curation files and study results: https://huggingface.co/datasets/NicolasT08/formal-mas-eval
+  (the informal text of the 5 PutnamBench problems is not redistributed there; see its `LICENSE.md`)
 
 ## Start here
 
