@@ -1,0 +1,6 @@
+# Demo (Phase 9): demo/app.py. Pinned; the app was written against this version's API.
+#   Replay + Results only (the public Space, DEMO_MODE=replay): this file alone.
+#   Live mode (local): requirements.txt as well, plus .env, lean_project/ and lean_repl/.
+# Note: installing gradio 6.31.0 into the project .venv downgraded pillow 13.0.0 -> 12.3.0
+# (gradio's pin); no project code imports PIL and matplotlib still saves PNGs with it.
+gradio==6.31.0

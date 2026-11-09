@@ -1,0 +1,95 @@
+{
+ "source": "docs/results/results.md (Tables 1 and 2)",
+ "sr": [
+  {
+   "config": "C1",
+   "solved": 20,
+   "n": 30,
+   "pct": 66.7,
+   "ci": [
+    48.8,
+    80.8
+   ]
+  },
+  {
+   "config": "C3",
+   "solved": 20,
+   "n": 30,
+   "pct": 66.7,
+   "ci": [
+    48.8,
+    80.8
+   ]
+  },
+  {
+   "config": "C4",
+   "solved": 14,
+   "n": 30,
+   "pct": 46.7,
+   "ci": [
+    30.2,
+    63.9
+   ]
+  },
+  {
+   "config": "C5",
+   "solved": 24,
+   "n": 30,
+   "pct": 80.0,
+   "ci": [
+    62.7,
+    90.5
+   ]
+  }
+ ],
+ "c2": {
+  "claimed": 30,
+  "n": 30,
+  "claimed_pct": 100.0,
+  "not_confirmed": 11,
+  "checked": 30,
+  "not_confirmed_pct": 36.7,
+  "not_confirmed_ci": [
+   21.9,
+   54.5
+  ]
+ },
+ "tests": [
+  {
+   "id": "H1",
+   "a": "C5",
+   "b": "C1",
+   "delta_pp": 13.3,
+   "ci": [
+    3.3,
+    26.7
+   ],
+   "p_adj": 0.375,
+   "significant": false
+  },
+  {
+   "id": "H2",
+   "a": "C5",
+   "b": "C3",
+   "delta_pp": 13.3,
+   "ci": [
+    0.0,
+    30.0
+   ],
+   "p_adj": 0.6562,
+   "significant": false
+  },
+  {
+   "id": "H3",
+   "a": "C5",
+   "b": "C4",
+   "delta_pp": 33.3,
+   "ci": [
+    16.7,
+    50.0
+   ],
+   "p_adj": 0.0059,
+   "significant": true
+  }
+ ]
+}

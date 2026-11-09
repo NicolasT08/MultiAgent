@@ -8,10 +8,12 @@ default_profile: dev
 
 providers:
   deepseek:
+    display_name: DeepSeek   # shown in the demo (demo/app.py); not used by the pipeline
     # https://api-docs.deepseek.com/ (OpenAI format)
     base_url: https://api.deepseek.com
     api_key_env: DEEPSEEK_API_KEY
   gemini:
+    display_name: Gemini     # shown in the demo (demo/app.py); not used by the pipeline
     # https://ai.google.dev/gemini-api/docs/openai
     base_url: https://generativelanguage.googleapis.com/v1beta/openai/
     api_key_env: GEMINI_API_KEY

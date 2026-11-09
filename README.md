@@ -620,6 +620,57 @@ pytest -m slow      # integration tests with real Lean + Mathlib (~2.5 min warm)
 The runner tests parse real Lean outputs stored in `tests/fixtures/lean/`; re-record
 them with `python scripts/capture_lean_fixtures.py` when the Lean version changes.
 
+### 5.7 Demo (Gradio)
+
+From the repository root in **PowerShell** (Windows):
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements-demo.txt            # gradio, pinned
+$env:PYTHONUTF8 = "1"
+python demo/app.py                              # open http://127.0.0.1:7860 (Lean loads in ~1 min warm)
+
+# other port, if 7860 is taken
+$env:GRADIO_SERVER_PORT = "7861"; python demo/app.py
+
+# recorded examples and results only (no Lean, no API key; what the public Space runs)
+$env:DEMO_MODE = "replay"; python demo/app.py
+Remove-Item Env:DEMO_MODE                       # back to the full demo
+
+python scripts/export_replays.py                # runs/ -> demo/replays/*.json + results (--candidates, --dry-run)
+python scripts/build_demo_set.py --dry-run      # the "New" problems draw (without --dry-run: compile with sorry, write)
+```
+
+The page is in Spanish by default, with an ES/EN switch; every visible text lives in
+`demo/i18n.py`. It is written for a reader who does not know Lean: technical details are
+always behind a closed "technical details" toggle.
+
+- **Solve** (local only: shown with `.env`, `lean_project/` and `lean_repl/` present and
+  `DEMO_MODE` not `replay`). The header shows "Preparing the verifier… (step X of 3)" while the
+  Lean REPL (Mathlib), the Retriever and a known-proof check load; the Solve button stays disabled
+  until "Ready". Pick a problem (filters New / Easy / Medium / Hard; **New** are the six miniF2F
+  `valid` problems in `data/demo_problems.jsonl`, outside the study and never run before, so a
+  solve is fully live) and press Solve. The model is **DeepSeek (`experiment` profile, paid) by
+  default, with no confirmation step**; the line under the button gives the typical cost, and the
+  spend guard caps each demo problem at **0.20 USD** (`--run-usd 0.20`; `b_max` is unchanged).
+  "Advanced options" switches to the free Gemini profile (`dev`) or takes a Lean statement typed by
+  the user (it must compile with `sorry`; no LLM ever writes or edits it). The frozen C5
+  configuration runs exactly as `scripts/run_eval.py --config C5 --run-name demo`, and the run is
+  saved in `runs/<time>_C5_<profile>_demo/` (its one-problem input in `runs/demo_inputs/`).
+  The steps (Plan, Search, Reason, Translate to Lean, Verify, Correct) update live; the result
+  comes only from the run's `status` (the Lean kernel), with time, model queries, cost and how
+  many queries came from the cache.
+- **Recorded examples** plays real study runs from `demo/replays/` (no Lean, no API key) with a
+  speed control, plus "Without the Critic" / "With the Critic" side by side (C4 vs C5). The
+  export keeps a whitelist of trace fields: no raw model output, prompts, cache keys or local
+  paths, and no PutnamBench informal text.
+- **Study results**: Tables 1 and 2 of `docs/results/results.md` with plain titles and one
+  reading sentence each.
+
+Demo runs are not part of the study: `docs/results/make_tables.py` leaves `*_demo` runs out of
+the project spend, and the demo's typical-cost line ignores them. They do count toward the
+project-wide spend cap (`spend.total_usd` in `config/pipeline.yaml`), like any paid call.
+
 ---
 
 ## 6. Reproducing the experiments

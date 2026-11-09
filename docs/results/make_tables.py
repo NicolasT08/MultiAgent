@@ -447,9 +447,17 @@ def own_wall(ctx, c, p) -> float:
     return r["wall_s"]
 
 
+def is_demo_run(run_id: str) -> bool:
+    """Runs started by the Gradio demo (demo/live.py, `--run-name demo`): not part of the study."""
+    return str(run_id).endswith("_demo")
+
+
 def ledger_index():
+    """(run, problem) -> real USD and paid calls, over the experiment runs only (demo runs left out)."""
     led, cnt = defaultdict(float), Counter()
     for e in read_jsonl(ROOT / "data" / "spend_ledger.jsonl"):
+        if is_demo_run(e["run_id"]):
+            continue
         led[(e["run_id"], e.get("problem_id"))] += e["cost_usd"]
         cnt[(e["run_id"], e.get("problem_id"))] += 1
     return led, cnt
