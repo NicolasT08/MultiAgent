@@ -4,7 +4,8 @@ Usage (from the repository root):
     .venv/Scripts/python.exe docs/results/make_tables.py            # test split -> docs/results/
     .venv/Scripts/python.exe docs/results/make_tables.py --dev OUT  # dry run on dev runs -> OUT/
 
-Nothing under runs/, data/, src/, scripts/ or config/ is written. Imports from src/: the statistics
+Nothing under runs/, data/, src/, scripts/ or config/ is written. The spend ledger is
+data/spend_ledger.jsonl, or the published copy runs/spend_ledger.jsonl (see resolve_ledger). Imports from src/: the statistics
 (formal_mas.analysis.stats) and the kappa classifier (formal_mas.orchestrator.policy.classify, for C1).
 The statistics (Wilson, exact McNemar, Bonferroni, bootstrap) come from
 src/formal_mas/analysis/stats.py, which has offline tests in tests/test_stats.py.
@@ -452,10 +453,36 @@ def is_demo_run(run_id: str) -> bool:
     return str(run_id).endswith("_demo")
 
 
+# The live ledger (config/pipeline.yaml -> spend.ledger) is outside git. A copy downloaded from the
+# Hub by scripts/download_runs.py lands in runs/ instead, so that it never counts towards the spend
+# caps of a new installation; --ledger picks a file explicitly.
+LEDGER_LIVE = ROOT / "data" / "spend_ledger.jsonl"
+LEDGER_PUBLISHED = RUNS / "spend_ledger.jsonl"
+LEDGER = None  # set by main()
+
+
+def resolve_ledger(arg: str | None) -> Path:
+    if arg:
+        return Path(arg)
+    if LEDGER_LIVE.exists() and _has_study_runs(LEDGER_LIVE):
+        return LEDGER_LIVE
+    if LEDGER_PUBLISHED.exists():
+        return LEDGER_PUBLISHED
+    raise SystemExit(f"no spend ledger with the study's runs: neither {LEDGER_LIVE.relative_to(ROOT)} nor "
+                     f"{LEDGER_PUBLISHED.relative_to(ROOT)} (python scripts/download_runs.py fetches it)")
+
+
+def _has_study_runs(path: Path) -> bool:
+    """True if the ledger has the paid calls of the test runs (a new installation's own ledger has not)."""
+    wanted = {run for runs in LEDGER_RUNS.values() for run in runs}
+    seen = {e.get("run_id") for e in read_jsonl(path)}
+    return wanted <= seen
+
+
 def ledger_index():
     """(run, problem) -> real USD and paid calls, over the experiment runs only (demo runs left out)."""
     led, cnt = defaultdict(float), Counter()
-    for e in read_jsonl(ROOT / "data" / "spend_ledger.jsonl"):
+    for e in read_jsonl(LEDGER or resolve_ledger(None)):
         if is_demo_run(e["run_id"]):
             continue
         led[(e["run_id"], e.get("problem_id"))] += e["cost_usd"]
@@ -936,7 +963,11 @@ def analyse(mode: str, outdir: Path) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Regenerate the analysis tables from runs/ (read-only).")
     ap.add_argument("--dev", metavar="OUTDIR", help="dry run on dev stand-in runs, writing to OUTDIR")
+    ap.add_argument("--ledger", help="spend ledger to read (default: data/spend_ledger.jsonl if it has the "
+                                     "study's runs, else runs/spend_ledger.jsonl from scripts/download_runs.py)")
     a = ap.parse_args()
+    global LEDGER
+    LEDGER = resolve_ledger(a.ledger)
     if a.dev:
         analyse("dev", Path(a.dev))
     else:

@@ -1,0 +1,50 @@
+{
+  "repo_id": "NicolasT08/formal-mas-index",
+  "revision": "9501193a13d007d27817e3ec26b5d95289e196cf",
+  "files": {
+    "corpus.jsonl": {
+      "size": 146213814,
+      "sha256": "c13c3b6851025a757998e53e68dc085fc5d4938c46aa76cb241b6760411fa833"
+    },
+    "corpus_meta.json": {
+      "size": 992,
+      "sha256": "baea3ec0737331a4298559fe608fa26d49f2eb240e54374639fd66eefc49a74d"
+    },
+    "full/bm25/bm25_idf.npy": {
+      "size": 50388,
+      "sha256": "d277ca48a5ab85387e52996beb288a0622242a3a8df5f205f521c247d84df5ef"
+    },
+    "full/bm25/bm25_matrix.npz": {
+      "size": 16834470,
+      "sha256": "7473e27cd997cc8bda4f9f97ef2d6f0f4bdd335673a89001df4d75274c15db58"
+    },
+    "full/bm25/bm25_vocab.json": {
+      "size": 214483,
+      "sha256": "ef168953b8d1c46051ebcd829920b386fce34189e8f9e2497bfcd4438f30a8d1"
+    },
+    "full/bm25/lemmas.json": {
+      "size": 52500362,
+      "sha256": "f6e826ff25cb308957add6d4b8fa602a1874d33aa3359bc2d0319898219f021b"
+    },
+    "full/bm25/meta.json": {
+      "size": 227,
+      "sha256": "d3915f6177f05a63f0da0a19afe88a91a621a06e8797f12d063cc4f7648810ca"
+    },
+    "full/e5-base/index.faiss": {
+      "size": 653964333,
+      "sha256": "536a98982c9f3159aea31c99baddb1932b07e4384e129ee6d3556c5fb6c4c4e7"
+    },
+    "full/e5-base/meta.json": {
+      "size": 1112,
+      "sha256": "c05066b5e17e2de58afc901bcbb9c72ff7c0f97f456c943b071c583d59312fee"
+    },
+    "full/e5-base/names.json": {
+      "size": 7717707,
+      "sha256": "56201d47834a45b602a483be12b353b651f89a0bf5a7c2461471491943714037"
+    },
+    "full/names_extra.json": {
+      "size": 1611575,
+      "sha256": "b52afe3a1702a60b79c6eb424bb598e70425dce08788cbe9135c5ff9518be6f3"
+    }
+  }
+}

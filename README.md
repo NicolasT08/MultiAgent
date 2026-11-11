@@ -9,8 +9,10 @@ Team: Andrés Felipe Mongui Torres and Nicolás Samuel Tinjacá Topia. License: 
 
 **On Hugging Face:**
 - Code: https://huggingface.co/NicolasT08/formal-mas
-- Evaluation set, curation files and study results: https://huggingface.co/datasets/NicolasT08/formal-mas-eval
+- Evaluation set, curation files, study results and run logs: https://huggingface.co/datasets/NicolasT08/formal-mas-eval
   (the informal text of the 5 PutnamBench problems is not redistributed there; see its `LICENSE.md`)
+- Retrieval index (Mathlib corpus, E5 vectors, BM25), downloaded by `scripts/setup.py`:
+  https://huggingface.co/datasets/NicolasT08/formal-mas-index
 
 ## Start here
 
@@ -338,6 +340,7 @@ formal-mas/
 │       └── retriever.py         # Retriever: subgoal → [LemmaHit], name suggestions
 │
 ├── scripts/
+│   ├── setup.py                 # one-command installation (Lean, REPL, index download, smoke test)
 │   ├── setup_lean.sh            # installs elan/Lean 4 and builds lean_project/
 │   ├── build_repl.sh            # builds the Lean REPL (pinned tag/commit) in lean_repl/
 │   ├── capture_lean_fixtures.py # records real Lean outputs for the runner tests
@@ -352,7 +355,9 @@ formal-mas/
 │   ├── fetch_eval_sources.sh    # downloads the pinned miniF2F port and PutnamBench → data/raw/
 │   ├── build_eval_set.py        # builds data/eval.jsonl (seeded draw, compile with sorry)
 │   ├── run_eval.py              # runs a configuration (C1–C5; PG = Planner/Generator preview) over a dataset
-│   └── run_baseline_b.py        # C2 with --check (FPR_B)
+│   ├── run_baseline_b.py        # C2 with --check (FPR_B)
+│   ├── download_runs.py         # published run logs (Hub) → runs/
+│   └── publish_hf.py            # publishes code / index / eval set + runs to the Hub (scan, diff, explicit list)
 │
 ├── lean_project/                # Lean 4 + Mathlib project (pinned versions)
 ├── lean_repl/                   # Lean REPL clone + build (generated, not in git)
@@ -364,7 +369,8 @@ formal-mas/
 │   ├── curation/                # selection criteria, discarded problems, fidelity review (+ post-test review)
 │   ├── raw/                     # pinned sources of eval.jsonl (not in git)
 │   ├── retrieval_eval/          # Q (q_dev.jsonl, q_test.jsonl) and evaluation results
-│   ├── index/                   # generated corpus and indexes (not in git)
+│   ├── index/                   # corpus and indexes (not in git; downloaded by setup.py)
+│   ├── index_manifest.json      # Hub revision, size and SHA-256 of every index file
 │   ├── llm_cache/               # LLM response cache (not in git)
 │   └── spend_ledger.jsonl       # every paid call (not in git)
 ├── runs/                        # one folder per run (not in git)
@@ -376,6 +382,7 @@ formal-mas/
 │   ├── prompt_log.md            # log of prompt changes and their measured effect (dev only)
 │   ├── schemas/                 # JSON Schemas of the agent contracts
 │   ├── results/                 # tables (results.md, tables.tex), figures/, make_tables.py, fprb_review.md
+│   ├── hf/                      # cards of the Hugging Face datasets (formal-mas-eval, formal-mas-index)
 │   └── report/                  # the report (PDF)
 └── tests/                       # offline unit tests (+ slow Lean integration tests)
 ```
@@ -387,17 +394,86 @@ formal-mas/
 
 ## 4. Installation
 
-Tested on Windows 11 (Git Bash) with Python 3.12; the scripts also work on Linux and macOS.
+Tested on Windows 11 with Python 3.12; the scripts are plain Python and also work on Linux
+and macOS.
 
-### 4.1 Requirements
+### 4.1 Installation from scratch (`scripts/setup.py`)
 
-- Python ≥ 3.10 (the project uses 3.12 in `.venv/`)
-- [uv](https://docs.astral.sh/uv/) (creates the Python environment, §4.2)
-- Git and `curl`
-- ~7 GB of disk for Lean 4 + Mathlib, plus ~3 GB for the indexes
-- ~4 GB of free RAM for the Lean REPL (Mathlib loaded)
+**Requirements**
 
-### 4.2 Python environment
+- Python **3.12** and [uv](https://docs.astral.sh/uv/) (or plain `venv` + `pip`)
+- Git
+- [elan](https://github.com/leanprover/elan), the Lean version manager (`setup.py` tells you how
+  to install it if it is missing; it then installs the pinned Lean version by itself)
+- Disk: **~10 GB** (Lean 4 + Mathlib ~6 GB, Python environment ~2 GB, retrieval index ~0.9 GB,
+  embedding model ~0.4 GB). An SSD is strongly recommended: on a hard disk the first
+  `import Mathlib` can take ~30 min instead of ~30 s.
+- RAM: **16 GB recommended** (8 GB minimum). The Lean REPL with Mathlib loaded uses ~4–6 GB; the
+  runner restarts it above 6 GB (`config/pipeline.yaml → lean.restart_memory_mb`).
+- Internet access for the first run (Mathlib cache, Lean REPL, index and embedding model).
+
+**Windows (PowerShell)**, from the repository root:
+
+```powershell
+uv venv --python 3.12 .venv
+.\.venv\Scripts\Activate.ps1
+uv pip install torch --index-url https://download.pytorch.org/whl/cpu   # CPU-only torch
+uv pip install -r requirements.txt
+uv pip install -e .
+$env:PYTHONUTF8 = "1"                       # Lean prints ℝ, ⊢, ≤ (set it permanently with setx)
+python scripts/setup.py
+```
+
+**Linux / macOS (Bash)**:
+
+```bash
+uv venv --python 3.12 .venv
+source .venv/bin/activate                   # Git Bash on Windows: source .venv/Scripts/activate
+uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+uv pip install -r requirements.txt
+uv pip install -e .
+python scripts/setup.py
+```
+
+`setup.py` runs five steps and stops with an explanation if something is missing:
+
+| Step | What it does |
+|---|---|
+| `checks` | Python 3.12, the packages of `requirements.txt`, git, elan and `lake` on PATH |
+| `lean` | `lake exe cache get` + `lake build` in `lean_project/` (Lean and Mathlib pinned by `lean-toolchain` and `lake-manifest.json`), then checks the Mathlib commit |
+| `repl` | clones the Lean REPL into `lean_repl/` at the tag and commit pinned in `scripts/build_repl.sh`, checks them and builds it |
+| `index` | downloads `data/index/` from the [formal-mas-index](https://huggingface.co/datasets/NicolasT08/formal-mas-index) dataset at the revision pinned in `data/index_manifest.json` and checks every SHA-256 |
+| `smoke` | one Lean verification through `LeanRunner` and one Retriever search |
+
+It can be run again at any time: finished work is detected and skipped, so after an
+interruption just run it again. It never deletes anything; if it finds unexpected local state
+(e.g. a rebuilt index with other hashes) it says what to move away. Single steps:
+`python scripts/setup.py --only index smoke`, `--skip lean repl`.
+
+**API keys.** Copy `.env.example` to `.env` (`Copy-Item .env.example .env` in PowerShell,
+`cp .env.example .env` in Bash) and fill in the keys you need; `.env` is git-ignored and must
+never be committed or uploaded:
+
+| Variable | Used by |
+|---|---|
+| `GEMINI_API_KEY` | the free `dev` profile (Gemini free tier), enough for `pytest -m slow` and the smoke runs |
+| `DEEPSEEK_API_KEY` | the paid `experiment` profile (the reported runs; the demo's default) |
+| `HF_TOKEN` | only to publish to the Hub (`scripts/publish_hf.py`); downloads need no token |
+
+Then check everything with:
+
+```bash
+pytest                                                                   # offline tests
+MODEL_PROFILE=dev python scripts/run_eval.py --config C5 --data data/smoke.jsonl --echo   # free, 5 toy problems
+```
+
+(PowerShell: `$env:MODEL_PROFILE = "dev"; python scripts/run_eval.py --config C5 --data data/smoke.jsonl --echo`.)
+
+The sections below describe the same installation step by step with the Bash scripts
+`scripts/setup_lean.sh` and `scripts/build_repl.sh`, and how to rebuild the index instead of
+downloading it.
+
+### 4.2 Python environment (manual installation)
 
 ```bash
 uv venv --python 3.12 .venv
@@ -456,8 +532,11 @@ Without it the runner falls back to `lake env lean` per file (~32 s per check).
 
 ### 4.5 Retrieval data
 
-The indexes are not versioned, so they must be rebuilt once. The reference set Q
-is already in `data/retrieval_eval/`.
+The system's index (`data/index/full/` + the corpus) is not in git. `scripts/setup.py --only index`
+downloads the published copy ([formal-mas-index](https://huggingface.co/datasets/NicolasT08/formal-mas-index),
+~840 MB, SHA-256 checked). To rebuild it from Lean instead (also needed for the evaluation
+indexes `data/index/eval/` of the RAG study; the reference set Q is already in
+`data/retrieval_eval/`):
 
 ```bash
 # 1. Corpus from the Lean environment (~15 min) → data/index/corpus.jsonl
@@ -682,12 +761,16 @@ project-wide spend cap (`spend.total_usd` in `config/pipeline.yaml`), like any p
 
 ### 6.1 Regenerating the tables and the figure from `runs/`
 
-The run folders are not in git (`runs/` is git-ignored); place the eight `test` run folders
-listed in `docs/results/results.md` ("Runs used") under `runs/`, plus the exploratory run
-`20261108T130803Z_C5_experiment_pro_pro_hard` (Table 12, post hoc) and
-`data/spend_ledger.jsonl` for the real-cost columns. Then, from the repository root:
+The run folders are not in git (`runs/` is git-ignored). They are published in the
+[formal-mas-eval](https://huggingface.co/datasets/NicolasT08/formal-mas-eval) dataset: the eight
+`test` run folders listed in `docs/results/results.md` ("Runs used"), the `dev` runs of the
+analysis dry run, the exploratory run `20261108T130803Z_C5_experiment_pro_pro_hard` (Table 12,
+post hoc) and the spend ledger for the real-cost columns. Absolute local paths in
+`run_config.json` were made relative before publishing; nothing else changed. From the
+repository root:
 
 ```bash
+python scripts/download_runs.py                       # → runs/<run>/ and runs/spend_ledger.jsonl (never overwrites)
 pytest tests/test_stats.py                            # the statistics against known values
 python docs/results/make_tables.py                    # → docs/results/results.md, tables.tex, figures/srk_curve.{pdf,png}
 python docs/results/check_explained.py                # every number in docs/results_explained.md matches results.md
@@ -698,6 +781,12 @@ python docs/results/make_tables.py --dev /tmp/devout  # optional: the same code 
 `docs/results_explained.md` is not verbatim, a note differs, or a number in the text does not
 appear in `results.md` at the precision shown. Run it after every `make_tables.py` run and
 every edit of `results_explained.md`.
+
+With the downloaded runs, `results.md` and `tables.tex` come out byte-identical to the
+committed ones. The ledger is `data/spend_ledger.jsonl` when it holds the study's runs (the
+authors' machine), otherwise the downloaded `runs/spend_ledger.jsonl`; `--ledger FILE` picks one.
+The downloaded copy is deliberately not placed in `data/`: the spend caps of
+`config/pipeline.yaml` sum that file, so the project's past spend would count against yours.
 
 `make_tables.py` only reads `runs/`, `data/eval.jsonl`, the ledger and
 `data/curation/fidelity_review.yaml`. The run folders and how interrupted runs are merged
