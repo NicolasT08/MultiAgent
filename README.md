@@ -420,6 +420,7 @@ uv venv --python 3.12 .venv
 uv pip install torch --index-url https://download.pytorch.org/whl/cpu   # CPU-only torch
 uv pip install -r requirements.txt
 uv pip install -e .
+uv pip install -r requirements-demo.txt     # optional: only for the Gradio demo (§5.7)
 $env:PYTHONUTF8 = "1"                       # Lean prints ℝ, ⊢, ≤ (set it permanently with setx)
 python scripts/setup.py
 ```
@@ -432,6 +433,7 @@ source .venv/bin/activate                   # Git Bash on Windows: source .venv/
 uv pip install torch --index-url https://download.pytorch.org/whl/cpu
 uv pip install -r requirements.txt
 uv pip install -e .
+uv pip install -r requirements-demo.txt     # optional: only for the Gradio demo (§5.7)
 python scripts/setup.py
 ```
 
@@ -449,6 +451,12 @@ It can be run again at any time: finished work is detected and skipped, so after
 interruption just run it again. It never deletes anything; if it finds unexpected local state
 (e.g. a rebuilt index with other hashes) it says what to move away. Single steps:
 `python scripts/setup.py --only index smoke`, `--skip lean repl`.
+
+In a clean-install test (fresh clone, Lean toolchain already installed by elan) the whole
+script took ~12 min, most of it the Mathlib cache download; it depends on your connection. On
+Windows the `smoke` step may print a `huggingface_hub` warning that the cache "uses symlinks …
+your machine does not support them": it is harmless (the embedding model is just stored without
+symlinks); set `HF_HUB_DISABLE_SYMLINKS_WARNING=1` to hide it.
 
 **API keys.** Copy `.env.example` to `.env` (`Copy-Item .env.example .env` in PowerShell,
 `cp .env.example .env` in Bash) and fill in the keys you need; `.env` is git-ignored and must
@@ -468,6 +476,11 @@ MODEL_PROFILE=dev python scripts/run_eval.py --config C5 --data data/smoke.jsonl
 ```
 
 (PowerShell: `$env:MODEL_PROFILE = "dev"; python scripts/run_eval.py --config C5 --data data/smoke.jsonl --echo`.)
+
+The deterministic pre-pass solves all five toy problems without any model call (`stage=prepass
+calls=0`), so this run checks Lean and the Retriever but not your API key. Add `--no-prepass` to
+send them through the agents (still free with `dev`; ~20 Gemini calls, ~3 min). The
+"unauthenticated requests to the HF Hub" warning is harmless: no token is needed to download.
 
 The sections below describe the same installation step by step with the Bash scripts
 `scripts/setup_lean.sh` and `scripts/build_repl.sh`, and how to rebuild the index instead of
@@ -534,7 +547,7 @@ Without it the runner falls back to `lake env lean` per file (~32 s per check).
 
 The system's index (`data/index/full/` + the corpus) is not in git. `scripts/setup.py --only index`
 downloads the published copy ([formal-mas-index](https://huggingface.co/datasets/NicolasT08/formal-mas-index),
-~840 MB, SHA-256 checked). To rebuild it from Lean instead (also needed for the evaluation
+~880 MB, SHA-256 checked). To rebuild it from Lean instead (also needed for the evaluation
 indexes `data/index/eval/` of the RAG study; the reference set Q is already in
 `data/retrieval_eval/`):
 
@@ -710,7 +723,7 @@ From the repository root in **PowerShell** (Windows):
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements-demo.txt            # gradio, pinned
+uv pip install -r requirements-demo.txt         # gradio, pinned (a uv venv has no `pip`)
 $env:PYTHONUTF8 = "1"
 python demo/app.py                              # open http://127.0.0.1:7860 (Lean loads in ~1 min warm)
 
@@ -738,7 +751,9 @@ always behind a closed "technical details" toggle.
   default, with no confirmation step**; the line under the button gives the typical cost, and the
   spend guard caps each demo problem at **0.20 USD** (`--run-usd 0.20`; `b_max` is unchanged).
   "Advanced options" switches to the free Gemini profile (`dev`) or takes a Lean statement typed by
-  the user (it must compile with `sorry`; no LLM ever writes or edits it). The frozen C5
+  the user (it must compile with `sorry`; no LLM ever writes or edits it). With only
+  `GEMINI_API_KEY` in `.env` (no `DEEPSEEK_API_KEY`), Solve is still shown with DeepSeek selected:
+  open "⚙ Advanced options" and pick the free model (`dev` profile) before pressing Solve. The frozen C5
   configuration runs exactly as `scripts/run_eval.py --config C5 --run-name demo`, and the run is
   saved in `runs/<time>_C5_<profile>_demo/` (its one-problem input in `runs/demo_inputs/`).
   The steps (Plan, Search, Reason, Translate to Lean, Verify, Correct) update live; the result

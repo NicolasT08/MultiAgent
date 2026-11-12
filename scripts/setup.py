@@ -59,7 +59,11 @@ class SetupError(Exception):
 
 
 def say(msg: str) -> None:
-    print(msg, flush=True)
+    try:
+        print(msg, flush=True)
+    except UnicodeEncodeError:  # console not in UTF-8 (PYTHONUTF8 unset): print what it can show
+        enc = sys.stdout.encoding or "ascii"
+        print(msg.encode(enc, errors="replace").decode(enc), flush=True)
 
 
 def step(title: str) -> None:
