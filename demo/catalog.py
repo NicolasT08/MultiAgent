@@ -13,7 +13,7 @@ import json
 import re
 from pathlib import Path
 
-from i18n import t
+from i18n import has, t
 
 ROOT = Path(__file__).resolve().parents[1]
 FILTERS = ("new", "easy", "medium", "hard")
@@ -23,7 +23,8 @@ LATEX = [{"left": "$$", "right": "$$", "display": True}, {"left": "$", "right": 
 COMPETITIONS = {"amc12": "AMC 12", "amc12a": "AMC 12A", "amc12b": "AMC 12B", "aime": "AIME", "aimei": "AIME I",
                 "aimeii": "AIME II", "imo": "IMO"}
 
-__all__ = ["FILTERS", "LATEX", "card_markdown", "competition", "cost_line", "filter_problems", "load_problems",
+__all__ = ["FILTERS", "LATEX", "card_markdown", "competition", "cost_line", "example_card", "filter_problems",
+           "load_problems", "model_of", "replay_text", "side_title",
            "results_markdown", "typical_costs"]
 
 
@@ -109,6 +110,31 @@ def card_markdown(p: dict, lang: str) -> str:
     lean = (f'<details class="fm-lean"><summary>{html.escape(t(lang, "card.see_lean"))}</summary>\n\n'
             f"```lean\n{statement_of(p)}\n```\n\n</details>")
     return f"{head}\n\n{body}\n\n{lean}"
+
+
+# -- recorded examples (also used by scripts/build_space.py) --------------------------------
+
+def replay_text(lang: str, key: str, rep: dict, field: str) -> str:
+    """Translated title/note of a replay (rep.<key>.<field>), else the replay's own English text."""
+    k = f"rep.{key}.{field}"
+    return t(lang, k) if has(lang, k) else str(rep.get(field) or key)
+
+
+def side_title(lang: str, config: str | None) -> str:
+    k = f"ex.side.{config}"
+    return t(lang, k) if has(lang, k) else t(lang, "ex.side.other", config=config)
+
+
+def model_of(rep: dict) -> str:
+    return ", ".join(sorted({str(m) for m in (rep.get("models") or {}).values()})) or "?"
+
+
+def example_card(lang: str, key: str, rep: dict) -> str:
+    """Markdown header of a recorded example: title, note, model, then the problem card."""
+    p = dict(rep.get("problem") or {})
+    note = replay_text(lang, key, rep, "note")
+    recorded = t(lang, "ex.recorded", model=model_of(rep))
+    return f"### {replay_text(lang, key, rep, 'title')}\n\n{note}\n\n<small>{recorded}</small>\n\n" + card_markdown(p, lang)
 
 
 def typical_costs(root: Path = ROOT) -> dict[str, float] | None:

@@ -1,0 +1,170 @@
+{
+ "links": {
+  "code": "https://huggingface.co/NicolasT08/formal-mas",
+  "eval": "https://huggingface.co/datasets/NicolasT08/formal-mas-eval",
+  "index": "https://huggingface.co/datasets/NicolasT08/formal-mas-index"
+ },
+ "speeds": [
+  "1",
+  "5",
+  "20",
+  "0"
+ ],
+ "default_speed": "5",
+ "max_gap_s": 2.5,
+ "icons": {
+  "pending": "○",
+  "running": "◌",
+  "done": "✓",
+  "failed": "✗",
+  "redo": "↻",
+  "skip": "–"
+ },
+ "examples": [
+  {
+   "key": "1_amc12_2001_p9_C5",
+   "config": "C5",
+   "title": {
+    "es": "Un problema medio, resuelto tras corregir un error",
+    "en": "A medium problem, solved after fixing an error"
+   }
+  },
+  {
+   "key": "2_imo_1964_p1_2_C5",
+   "config": "C5",
+   "title": {
+    "es": "Un problema de la IMO 1964, resuelto",
+    "en": "An IMO 1964 problem, solved"
+   }
+  },
+  {
+   "key": "3_algebra_absapb_C5",
+   "config": "C5",
+   "title": {
+    "es": "El Critic reintenta y replantea hasta resolverlo",
+    "en": "The Critic retries and rethinks until it is solved"
+   }
+  },
+  {
+   "key": "3b_algebra_absapb_C4",
+   "config": "C4",
+   "title": {
+    "es": "El mismo problema sin Critic",
+    "en": "The same problem without the Critic"
+   }
+  },
+  {
+   "key": "4_imo_1979_p1_C2",
+   "config": "C2",
+   "title": {
+    "es": "La IA dice que lo resolvió; Lean no lo confirma",
+    "en": "The AI says it solved it; Lean does not confirm it"
+   }
+  }
+ ],
+ "pairs": [
+  [
+   "3b_algebra_absapb_C4",
+   "3_algebra_absapb_C5"
+  ]
+ ],
+ "results": {
+  "es": "<p>Estudio sobre 30 problemas de prueba que no se usaron para ajustar el sistema. Cada versión se probó con los mismos problemas y el mismo modelo.</p>\n<h3>¿Cuántos problemas resolvió cada versión?</h3>\n<table>\n<thead>\n<tr>\n<th>Versión</th>\n<th>Resueltos</th>\n<th>Porcentaje</th>\n<th>Rango probable (95 %)</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td><strong>Sistema completo</strong></td>\n<td>24 de 30</td>\n<td>80 %</td>\n<td>63–90 %</td>\n</tr>\n<tr>\n<td>Solo la IA escribe la prueba en Lean</td>\n<td>20 de 30</td>\n<td>67 %</td>\n<td>49–81 %</td>\n</tr>\n<tr>\n<td>Sistema completo sin búsqueda en Mathlib</td>\n<td>20 de 30</td>\n<td>67 %</td>\n<td>49–81 %</td>\n</tr>\n<tr>\n<td>Sistema completo sin Critic</td>\n<td>14 de 30</td>\n<td>47 %</td>\n<td>30–64 %</td>\n</tr>\n</tbody>\n</table>\n<p>Lectura: el sistema completo resolvió 24 de 30 problemas, con prueba verificada por Lean; sin el Critic, 14 de 30.</p>\n<h3>¿Y la IA sin Lean?</h3>\n<p>La IA sola afirmó resolver 30 de 30 problemas. Al verificar esas soluciones, Lean no pudo confirmar 11 (37 %). Por eso aquí el veredicto final lo da Lean, no la IA.</p>\n<h3>¿Qué aporta cada pieza del sistema?</h3>\n<table>\n<thead>\n<tr>\n<th>Comparación</th>\n<th>Diferencia en problemas resueltos</th>\n<th>¿Diferencia clara?</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>Sistema completo frente a solo la IA</td>\n<td>+13.3 puntos</td>\n<td>No se puede afirmar (p = 0.375)</td>\n</tr>\n<tr>\n<td>Aporte de la búsqueda en Mathlib</td>\n<td>+13.3 puntos</td>\n<td>No se puede afirmar (p = 0.656)</td>\n</tr>\n<tr>\n<td>Aporte del Critic</td>\n<td>+33.3 puntos</td>\n<td>Sí (p = 0.006)</td>\n</tr>\n</tbody>\n</table>\n<p>Lectura: con solo 30 problemas, la única diferencia estadísticamente clara es la del Critic; las demás podrían deberse al azar.</p>\n<p><small>Rangos: intervalos de Wilson al 95 %. Diferencias: prueba exacta de McNemar con corrección de Bonferroni (3 comparaciones).</small></p>",
+  "en": "<p>Study on 30 test problems that were not used to tune the system. Every version was tried on the same problems with the same model.</p>\n<h3>How many problems did each version solve?</h3>\n<table>\n<thead>\n<tr>\n<th>Version</th>\n<th>Solved</th>\n<th>Percentage</th>\n<th>Likely range (95 %)</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td><strong>Full system</strong></td>\n<td>24 of 30</td>\n<td>80 %</td>\n<td>63–90 %</td>\n</tr>\n<tr>\n<td>Only the AI writes the Lean proof</td>\n<td>20 of 30</td>\n<td>67 %</td>\n<td>49–81 %</td>\n</tr>\n<tr>\n<td>Full system without searching Mathlib</td>\n<td>20 of 30</td>\n<td>67 %</td>\n<td>49–81 %</td>\n</tr>\n<tr>\n<td>Full system without the Critic</td>\n<td>14 of 30</td>\n<td>47 %</td>\n<td>30–64 %</td>\n</tr>\n</tbody>\n</table>\n<p>Reading: the full system solved 24 of 30 problems, each with a proof verified by Lean; without the Critic, 14 of 30.</p>\n<h3>And the AI without Lean?</h3>\n<p>The AI alone claimed to solve 30 of 30 problems. When those solutions were checked, Lean could not confirm 11 (37 %). That is why the final verdict here comes from Lean, not from the AI.</p>\n<h3>What does each part of the system add?</h3>\n<table>\n<thead>\n<tr>\n<th>Comparison</th>\n<th>Difference in problems solved</th>\n<th>Clear difference?</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>Full system versus the AI alone</td>\n<td>+13.3 points</td>\n<td>Cannot be claimed (p = 0.375)</td>\n</tr>\n<tr>\n<td>What searching Mathlib adds</td>\n<td>+13.3 points</td>\n<td>Cannot be claimed (p = 0.656)</td>\n</tr>\n<tr>\n<td>What the Critic adds</td>\n<td>+33.3 points</td>\n<td>Yes (p = 0.006)</td>\n</tr>\n</tbody>\n</table>\n<p>Reading: with only 30 problems, the only statistically clear difference is the one from the Critic; the others could be due to chance.</p>\n<p><small>Ranges: 95 % Wilson intervals. Differences: exact McNemar test with Bonferroni correction (3 comparisons).</small></p>"
+ },
+ "results_data": {
+  "source": "docs/results/results.md (Tables 1 and 2)",
+  "sr": [
+   {
+    "config": "C1",
+    "solved": 20,
+    "n": 30,
+    "pct": 66.7,
+    "ci": [
+     48.8,
+     80.8
+    ]
+   },
+   {
+    "config": "C3",
+    "solved": 20,
+    "n": 30,
+    "pct": 66.7,
+    "ci": [
+     48.8,
+     80.8
+    ]
+   },
+   {
+    "config": "C4",
+    "solved": 14,
+    "n": 30,
+    "pct": 46.7,
+    "ci": [
+     30.2,
+     63.9
+    ]
+   },
+   {
+    "config": "C5",
+    "solved": 24,
+    "n": 30,
+    "pct": 80.0,
+    "ci": [
+     62.7,
+     90.5
+    ]
+   }
+  ],
+  "c2": {
+   "claimed": 30,
+   "n": 30,
+   "claimed_pct": 100.0,
+   "not_confirmed": 11,
+   "checked": 30,
+   "not_confirmed_pct": 36.7,
+   "not_confirmed_ci": [
+    21.9,
+    54.5
+   ]
+  },
+  "tests": [
+   {
+    "id": "H1",
+    "a": "C5",
+    "b": "C1",
+    "delta_pp": 13.3,
+    "ci": [
+     3.3,
+     26.7
+    ],
+    "p_adj": 0.375,
+    "significant": false
+   },
+   {
+    "id": "H2",
+    "a": "C5",
+    "b": "C3",
+    "delta_pp": 13.3,
+    "ci": [
+     0.0,
+     30.0
+    ],
+    "p_adj": 0.6562,
+    "significant": false
+   },
+   {
+    "id": "H3",
+    "a": "C5",
+    "b": "C4",
+    "delta_pp": 33.3,
+    "ci": [
+     16.7,
+     50.0
+    ],
+    "p_adj": 0.0059,
+    "significant": true
+   }
+  ]
+ }
+}

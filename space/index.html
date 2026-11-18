@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Formal-MAS</title>
+<meta name="description" content="Recorded runs of Formal-MAS: AI agents solve olympiad problems and Lean 4 checks every proof.">
+<!-- the only external dependency: KaTeX for the formulas (pinned version + subresource integrity) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+      integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+        integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg" crossorigin="anonymous"></script>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234338ca'/%3E%3Cpath d='M9 16.5l4.5 4.5L23 11.5' stroke='white' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+<script defer src="app.js"></script>
+</head>
+<body>
+<div class="page">
+  <header class="head">
+    <div class="head-text">
+      <h1 data-i18n="app.title">Formal-MAS</h1>
+      <p class="tagline" data-i18n="app.tagline"></p>
+    </div>
+    <div class="lang" role="group" data-i18n-aria="lang.label">
+      <button type="button" data-lang="es">ES</button><button type="button" data-lang="en">EN</button>
+    </div>
+  </header>
+
+  <p class="note">
+    <span data-i18n="space.note"></span>
+    <a data-link="code" data-i18n="space.note_link" target="_blank" rel="noopener"></a>
+  </p>
+
+  <nav class="tabs" role="tablist">
+    <button type="button" role="tab" id="tab-examples" aria-controls="panel-examples" data-tab="examples" data-i18n="tab.examples"></button>
+    <button type="button" role="tab" id="tab-results" aria-controls="panel-results" data-tab="results" data-i18n="tab.results"></button>
+  </nav>
+
+  <p id="loading" class="muted" data-i18n="space.loading">Cargando…</p>
+
+  <main>
+    <section id="panel-examples" role="tabpanel" aria-labelledby="tab-examples" hidden>
+      <p class="muted" data-i18n="ex.intro"></p>
+      <h2 class="label" data-i18n="ex.pick"></h2>
+      <div id="ex-list" class="ex-list" role="radiogroup"></div>
+
+      <article id="ex-card" class="card"></article>
+
+      <div class="controls">
+        <div class="speed" role="radiogroup" data-speed-for="single">
+          <span class="speed-label" data-i18n="ex.speed"></span>
+        </div>
+        <div class="buttons">
+          <button type="button" class="primary" id="ex-play" data-i18n="ex.play"></button>
+          <button type="button" class="secondary" id="ex-stop" data-i18n="ex.stop" disabled></button>
+        </div>
+      </div>
+      <div class="progress"><div id="ex-progress"></div></div>
+
+      <h2 data-i18n="steps.title"></h2>
+      <div id="ex-steps" class="steps" aria-live="polite"></div>
+      <h2 data-i18n="result.title"></h2>
+      <div id="ex-result"></div>
+
+      <section id="pair" class="pair" hidden>
+        <h2 data-i18n="ex.pair_title"></h2>
+        <p class="muted" data-i18n="ex.pair_intro"></p>
+        <details id="pair-problem" class="card pair-problem"><summary data-i18n="ex.problem"></summary><div id="pair-problem-body"></div></details>
+        <div class="controls">
+          <div class="speed" role="radiogroup" data-speed-for="pair">
+            <span class="speed-label" data-i18n="ex.speed"></span>
+          </div>
+          <div class="buttons">
+            <button type="button" class="primary" id="pair-play" data-i18n="ex.play_both"></button>
+            <button type="button" class="secondary" id="pair-stop" data-i18n="ex.stop" disabled></button>
+          </div>
+        </div>
+        <div class="progress"><div id="pair-progress"></div></div>
+        <div class="pair-cols">
+          <div class="pair-col">
+            <h3 id="pair-title-a"></h3>
+            <div id="pair-steps-a" class="steps"></div>
+            <div id="pair-result-a"></div>
+          </div>
+          <div class="pair-col">
+            <h3 id="pair-title-b"></h3>
+            <div id="pair-steps-b" class="steps"></div>
+            <div id="pair-result-b"></div>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section id="panel-results" role="tabpanel" aria-labelledby="tab-results" hidden>
+      <div id="results" class="results"></div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <h2 data-i18n="links.title"></h2>
+    <ul class="links">
+      <li><a data-link="code" data-i18n="links.code" target="_blank" rel="noopener"></a></li>
+      <li><a data-link="eval" data-i18n="links.eval" target="_blank" rel="noopener"></a></li>
+      <li><a data-link="index" data-i18n="links.index" target="_blank" rel="noopener"></a></li>
+    </ul>
+    <p class="muted" data-i18n="space.footer"></p>
+  </footer>
+</div>
+</body>
+</html>

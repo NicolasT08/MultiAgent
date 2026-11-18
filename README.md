@@ -13,6 +13,8 @@ Team: Andrés Felipe Mongui Torres and Nicolás Samuel Tinjacá Topia. License: 
   (the informal text of the 5 PutnamBench problems is not redistributed there; see its `LICENSE.md`)
 - Retrieval index (Mathlib corpus, E5 vectors, BM25), downloaded by `scripts/setup.py`:
   https://huggingface.co/datasets/NicolasT08/formal-mas-index
+- Demo (static page, Spanish/English: five recorded runs step by step and the study results; no
+  Lean and no model in the browser): https://huggingface.co/spaces/NicolasT08/formal-mas-demo
 
 ## Start here
 
@@ -357,7 +359,12 @@ formal-mas/
 │   ├── run_eval.py              # runs a configuration (C1–C5; PG = Planner/Generator preview) over a dataset
 │   ├── run_baseline_b.py        # C2 with --check (FPR_B)
 │   ├── download_runs.py         # published run logs (Hub) → runs/
-│   └── publish_hf.py            # publishes code / index / eval set + runs to the Hub (scan, diff, explicit list)
+│   ├── export_replays.py        # runs/ → demo/replays/*.json (whitelisted fields)
+│   ├── build_space.py           # demo/replays + results.md + demo/i18n.py → space/data/ (static Space)
+│   └── publish_hf.py            # publishes code / index / eval set + runs / Space to the Hub (scan, diff, explicit list)
+│
+├── demo/                        # Gradio demo (app.py, steps.py, timeline.py, catalog.py, i18n.py, replays/)
+├── space/                       # static Hugging Face Space: index.html, app.js, style.css, data/ (generated)
 │
 ├── lean_project/                # Lean 4 + Mathlib project (pinned versions)
 ├── lean_repl/                   # Lean REPL clone + build (generated, not in git)
@@ -382,7 +389,7 @@ formal-mas/
 │   ├── prompt_log.md            # log of prompt changes and their measured effect (dev only)
 │   ├── schemas/                 # JSON Schemas of the agent contracts
 │   ├── results/                 # tables (results.md, tables.tex), figures/, make_tables.py, fprb_review.md
-│   ├── hf/                      # cards of the Hugging Face datasets (formal-mas-eval, formal-mas-index)
+│   ├── hf/                      # Hub cards: datasets formal-mas-eval, formal-mas-index; Space formal-mas-demo
 │   └── report/                  # the report (PDF)
 └── tests/                       # offline unit tests (+ slow Lean integration tests)
 ```
@@ -730,7 +737,7 @@ python demo/app.py                              # open http://127.0.0.1:7860 (Le
 # other port, if 7860 is taken
 $env:GRADIO_SERVER_PORT = "7861"; python demo/app.py
 
-# recorded examples and results only (no Lean, no API key; what the public Space runs)
+# recorded examples and results only (no Lean, no API key; the public Space is the static page below)
 $env:DEMO_MODE = "replay"; python demo/app.py
 Remove-Item Env:DEMO_MODE                       # back to the full demo
 
@@ -765,6 +772,34 @@ always behind a closed "technical details" toggle.
   paths, and no PutnamBench informal text.
 - **Study results**: Tables 1 and 2 of `docs/results/results.md` with plain titles and one
   reading sentence each.
+
+#### Public Space (static page)
+
+Hugging Face asks for a PRO account to run Gradio on its free hardware, so the public Space,
+https://huggingface.co/spaces/NicolasT08/formal-mas-demo, is a static page (`sdk: static`) in
+`space/`: `index.html`, `app.js`, `style.css` and the data in `space/data/`. It has the Recorded
+examples and Study results tabs of the demo (ES/EN, steps with status icons, technical details
+and the final Lean proof folded, "Without the Critic" / "With the Critic" side by side), runs no
+model and no Lean, needs no key, and its only external dependency is KaTeX (pinned version, with
+subresource integrity) from jsDelivr.
+
+The page decides nothing: `scripts/build_space.py` runs the demo's own code (`demo/steps.py`,
+`demo/timeline.py`, `demo/catalog.py`) on every event of every replay in both languages and
+writes the frames as HTML/text; `app.js` only plays them back with the recorded timing. The texts
+are `demo/i18n.py` exported to `space/data/i18n.json`, and the results are read from
+`docs/results/results.md`. Rebuild after changing a replay, a text or the results, and look at it
+with any static server:
+
+```powershell
+python scripts/build_space.py                   # writes space/data/ (scan for keys, paths, e-mails, Putnam text)
+python scripts/build_space.py --check           # exit 1 if space/data/ is out of date (also a test)
+python -m http.server 8000 --directory space    # open http://127.0.0.1:8000 (?lang=en for English)
+python scripts/publish_hf.py space --worktree --list   # preview of what would be uploaded (before committing)
+python scripts/publish_hf.py space --upload     # from git HEAD: scan, diff, confirm, upload
+```
+
+Python's `http.server` sometimes drops the larger replay files on Windows ("Failed to fetch");
+any other static server works, and the Hub serves the files without that problem.
 
 Demo runs are not part of the study: `docs/results/make_tables.py` leaves `*_demo` runs out of
 the project spend, and the demo's typical-cost line ignores them. They do count toward the

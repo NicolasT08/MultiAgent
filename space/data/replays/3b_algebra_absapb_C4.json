@@ -1,0 +1,1688 @@
+{
+ "key": "3b_algebra_absapb_C4",
+ "config": "C4",
+ "steps": [
+  "plan",
+  "search",
+  "reason",
+  "translate",
+  "verify",
+  "correct"
+ ],
+ "t": [
+  0.0,
+  0.204,
+  0.204,
+  0.512,
+  0.686,
+  0.686,
+  0.771,
+  0.771,
+  0.995,
+  0.995,
+  1.175,
+  1.175,
+  1.361,
+  1.361,
+  1.83,
+  1.83,
+  2.087,
+  2.103,
+  2.104,
+  2.105,
+  2.105,
+  2.108,
+  2.187,
+  2.321,
+  2.321,
+  2.322,
+  2.322,
+  2.322
+ ],
+ "owner": [
+  -1,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  2,
+  2,
+  2,
+  2,
+  3,
+  3,
+  3,
+  4,
+  5,
+  -1,
+  -1
+ ],
+ "tech": [
+  "",
+  "",
+  "<p><strong>Pre-pass</strong> (tactics alone, no LLM) on theorem: no tactic closes it (0.203 s)</p>",
+  "<p><sub>LLM call 1: <strong>planner</strong> (deepseek-flash) · 0.0 s · $0.0000 · cached</sub></p>",
+  "",
+  "<p><strong>Planner</strong> proposes 2 subgoal(s):</p>\n<ol>\n<li>\n<p><code>abs (a + b) / (1 + abs (a + b)) ≤ (abs a + abs b) / (1 + abs a + abs b)</code></p>\n</li>\n<li>\n<p><code>(abs a + abs b) / (1 + abs a + abs b) ≤ abs a / (1 + abs a) + abs b / (1 + abs b)</code></p>\n</li>\n</ol>\n<p>Closing step (uses the subgoals as hypotheses):</p>\n<pre><code class=\"language-lean\">linarith [h1, h2]\n</code></pre>\n<p><em>Rationale: Use |a+b| ≤ |a|+|b| and monotonicity of x ↦ x/(1+x) on nonnegative reals to get the first bound, then compare the remaining rational expression algebraically with the sum of the two separate terms.</em></p>",
+  "",
+  "<p>Skeleton built by the code (subgoals, with <code>sorry</code>): compiles ✓</p>",
+  "",
+  "<p>Refutation check: no subgoal is refutable ✓</p>",
+  "",
+  "<p>Closing step checked by Lean: accepted ✓</p>",
+  "",
+  "<p>Skeleton built by the code (full, with <code>sorry</code>): compiles ✓</p>",
+  "",
+  "<p><strong>Pre-pass</strong> (tactics alone, no LLM) on sg1, sg2: no tactic closes it (0.468 s)</p>",
+  "<p><strong>Retriever</strong> (RAG over Mathlib), subgoal 1: 16 lemmas: <code>Int.abs_ediv_le_abs</code>, <code>abs_sub_abs_le_abs_add</code>, <code>ENNReal.rpow_add_rpow_le_add</code>, <code>abs_abs_sub_abs_le</code>, <code>abs_add'</code>, <code>Int.ediv_eq_zero_of_lt_abs</code>, <code>abs_norm_sub_norm_le'</code>, <code>Real.rpow_add_rpow_le</code> … (+8 more)</p>",
+  "<p><sub>LLM call 1: <strong>generator</strong> (deepseek-flash) · 0.0 s · $0.0000 · cached</sub></p>\n<details><summary>Sketch (strategy <code>algebraic_manipulation</code>)</summary>\n<blockquote>\n<ol>\n<li>Let x = abs (a + b) and y = abs a + abs b. By the triangle inequality, x ≤ y; also x ≥ 0 and y ≥ 0.</li>\n<li>Both denominators 1 + x and 1 + y are positive.</li>\n<li>It suffices to prove x / (1 + x) ≤ y / (1 + y). Cross-multiplying by the positive denominators gives the equivalent inequality x * (1 + y) ≤ y * (1 + x).</li>\n<li>Expanding both sides, this becomes x + x<em>y ≤ y + x</em>y, which is equivalent to x ≤ y.</li>\n<li>Since x ≤ y holds, the desired inequality follows.</li>\n</ol>\n</blockquote>\n</details>",
+  "<p><sub>LLM call 2: <strong>generator</strong> (deepseek-flash) · 0.0 s · $0.0000 · cached</sub></p>\n<details><summary>Sketch (strategy <code>algebraic_manipulation</code>)</summary>\n<blockquote>\n<ol>\n<li>Let x = |a+b| and y = |a|+|b|. Then x ≥ 0 and y ≥ 0.</li>\n<li>By the triangle inequality, x = |a+b| ≤ |a|+|b| = y.</li>\n<li>The function f(t)=t/(1+t) is increasing on [0,∞): if 0 ≤ x ≤ y, then x/(1+x) ≤ y/(1+y), since cross-multiplying gives x(1+y) ≤ y(1+x), equivalent to x ≤ y.</li>\n<li>Apply this monotonicity to x and y to obtain |a+b|/(1+|a+b|) ≤ (|a|+|b|)/(1+|a|+|b|).</li>\n</ol>\n</blockquote>\n</details>",
+  "<p><sub>LLM call 3: <strong>generator</strong> (deepseek-flash) · 0.0 s · $0.0000 · cached</sub></p>\n<details><summary>Sketch (strategy <code>algebraic_manipulation</code>)</summary>\n<blockquote>\n<ol>\n<li>Put x = |a+b| and y = |a|+|b|. Then x ≥ 0, y ≥ 0, and x ≤ y by the triangle inequality.</li>\n<li>Both denominators are positive: 1+x &gt; 0 and 1+y &gt; 0.</li>\n<li>Since y ≥ 0, the inequality x/(1+x) ≤ y/(1+y) is equivalent by cross-multiplication to x*(1+y) ≤ y*(1+x).</li>\n<li>Expanding gives x + x<em>y ≤ y + x</em>y, hence equivalently x ≤ y after cancelling x*y.</li>\n<li>The inequality x ≤ y holds, so x/(1+x) ≤ y/(1+y).</li>\n<li>Substituting x = |a+b| and y = |a|+|b| gives exactly |a+b|/(1+|a+b|) ≤ (|a|+|b|)/(1+|a|+|b|).</li>\n</ol>\n</blockquote>\n</details>",
+  "<p><strong>Generator</strong> subgoal 1: 3 sketches, votes {algebraic_manipulation: 3} → strategy <strong>algebraic_manipulation</strong></p>",
+  "<p><sub>LLM call 1: <strong>autoformalizer</strong> (deepseek-flash) · 0.0 s · $0.0000 · cached</sub></p>",
+  "",
+  "",
+  "<p>✗ <strong>Lean attempt</strong> on subgoal 1: <code>error</code></p>\n<pre><code class=\"language-lean\">have h1 : (0 : ℝ) &lt; 1 + |a + b| := by positivity\nhave h2 : (0 : ℝ) &lt; 1 + |a| + |b| := by positivity\nrw [div_le_div_iff h1 h2]\nnlinarith [abs_add a b, abs_nonneg (a + b), abs_nonneg a, abs_nonneg b]\n</code></pre>\n<pre><code class=\"language-text\">line 12: Unknown identifier `div_le_div_iff`\n\nline 9: unsolved goals\na b : ℝ\nh1 : 0 &lt; 1 + |a + b|\nh2 : 0 &lt; 1 + |a| + |b|\n⊢ |a + b| / (1 + |a + b|) ≤ (|a| + |b|) / (1 + |a| + |b|)\n</code></pre>",
+  "<p><strong>Critic</strong> (rules): κ = <code>missing_lemma</code> → π = <strong>abandon</strong> (attempt 1, replans 0, 5 LLM calls used)</p>",
+  "",
+  ""
+ ],
+ "frames": {
+  "es": [
+   [
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Pensando cómo dividir el problema…"
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Pensando cómo dividir el problema…"
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Pensando cómo dividir el problema…"
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Pensando cómo dividir el problema…"
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Pensando cómo dividir el problema…"
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "running",
+     "Encontró 16 resultados útiles en Mathlib, la biblioteca de matemáticas de Lean."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "done",
+     "Encontró 16 resultados útiles en Mathlib, la biblioteca de matemáticas de Lean."
+    ],
+    [
+     "running",
+     "Escribiendo varias ideas de solución…"
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "done",
+     "Encontró 16 resultados útiles en Mathlib, la biblioteca de matemáticas de Lean."
+    ],
+    [
+     "running",
+     "Escribiendo varias ideas de solución…"
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "done",
+     "Encontró 16 resultados útiles en Mathlib, la biblioteca de matemáticas de Lean."
+    ],
+    [
+     "running",
+     "Escribiendo varias ideas de solución…"
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "done",
+     "Encontró 16 resultados útiles en Mathlib, la biblioteca de matemáticas de Lean."
+    ],
+    [
+     "running",
+     "Propuso 3 ideas y eligió por votación: «manipulación algebraica» (3 de 3 votos)."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "done",
+     "Encontró 16 resultados útiles en Mathlib, la biblioteca de matemáticas de Lean."
+    ],
+    [
+     "done",
+     "Propuso 3 ideas y eligió por votación: «manipulación algebraica» (3 de 3 votos)."
+    ],
+    [
+     "running",
+     "Escribiendo la prueba en el lenguaje de Lean…"
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "done",
+     "Encontró 16 resultados útiles en Mathlib, la biblioteca de matemáticas de Lean."
+    ],
+    [
+     "done",
+     "Propuso 3 ideas y eligió por votación: «manipulación algebraica» (3 de 3 votos)."
+    ],
+    [
+     "running",
+     "Escribiendo la prueba en el lenguaje de Lean…"
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "done",
+     "Encontró 16 resultados útiles en Mathlib, la biblioteca de matemáticas de Lean."
+    ],
+    [
+     "done",
+     "Propuso 3 ideas y eligió por votación: «manipulación algebraica» (3 de 3 votos)."
+    ],
+    [
+     "running",
+     "Escribiendo la prueba en el lenguaje de Lean…"
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "done",
+     "Encontró 16 resultados útiles en Mathlib, la biblioteca de matemáticas de Lean."
+    ],
+    [
+     "done",
+     "Propuso 3 ideas y eligió por votación: «manipulación algebraica» (3 de 3 votos)."
+    ],
+    [
+     "done",
+     "Escribió 1 intento(s) de prueba en Lean."
+    ],
+    [
+     "running",
+     "Lean rechazó el intento 1: Lean encontró errores."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "done",
+     "Encontró 16 resultados útiles en Mathlib, la biblioteca de matemáticas de Lean."
+    ],
+    [
+     "done",
+     "Propuso 3 ideas y eligió por votación: «manipulación algebraica» (3 de 3 votos)."
+    ],
+    [
+     "done",
+     "Escribió 1 intento(s) de prueba en Lean."
+    ],
+    [
+     "running",
+     "Lean rechazó el intento 1: usó un resultado que no existe en Mathlib."
+    ],
+    [
+     "failed",
+     "Esta versión no tiene Critic: se detiene en el primer error (usó un resultado que no existe en Mathlib)."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "done",
+     "Encontró 16 resultados útiles en Mathlib, la biblioteca de matemáticas de Lean."
+    ],
+    [
+     "done",
+     "Propuso 3 ideas y eligió por votación: «manipulación algebraica» (3 de 3 votos)."
+    ],
+    [
+     "done",
+     "Escribió 1 intento(s) de prueba en Lean."
+    ],
+    [
+     "running",
+     "Lean rechazó el intento 1: usó un resultado que no existe en Mathlib."
+    ],
+    [
+     "failed",
+     "Esta versión no tiene Critic: se detiene en el primer error (usó un resultado que no existe en Mathlib)."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "done",
+     "Encontró 16 resultados útiles en Mathlib, la biblioteca de matemáticas de Lean."
+    ],
+    [
+     "done",
+     "Propuso 3 ideas y eligió por votación: «manipulación algebraica» (3 de 3 votos)."
+    ],
+    [
+     "done",
+     "Escribió 1 intento(s) de prueba en Lean."
+    ],
+    [
+     "running",
+     "Lean rechazó el intento 1: usó un resultado que no existe en Mathlib."
+    ],
+    [
+     "failed",
+     "Esta versión no tiene Critic: se detiene en el primer error (usó un resultado que no existe en Mathlib)."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Dividió el problema en 2 pasos."
+    ],
+    [
+     "done",
+     "Encontró 16 resultados útiles en Mathlib, la biblioteca de matemáticas de Lean."
+    ],
+    [
+     "done",
+     "Propuso 3 ideas y eligió por votación: «manipulación algebraica» (3 de 3 votos)."
+    ],
+    [
+     "done",
+     "Escribió 1 intento(s) de prueba en Lean."
+    ],
+    [
+     "failed",
+     "Lean rechazó el intento 1: usó un resultado que no existe en Mathlib."
+    ],
+    [
+     "failed",
+     "Esta versión no tiene Critic: se detiene en el primer error (usó un resultado que no existe en Mathlib)."
+    ]
+   ]
+  ],
+  "en": [
+   [
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Thinking about how to split the problem…"
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Thinking about how to split the problem…"
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Thinking about how to split the problem…"
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Thinking about how to split the problem…"
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Thinking about how to split the problem…"
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "running",
+     "Found 16 useful results in Mathlib, Lean's mathematics library."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "done",
+     "Found 16 useful results in Mathlib, Lean's mathematics library."
+    ],
+    [
+     "running",
+     "Writing several solution ideas…"
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "done",
+     "Found 16 useful results in Mathlib, Lean's mathematics library."
+    ],
+    [
+     "running",
+     "Writing several solution ideas…"
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "done",
+     "Found 16 useful results in Mathlib, Lean's mathematics library."
+    ],
+    [
+     "running",
+     "Writing several solution ideas…"
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "done",
+     "Found 16 useful results in Mathlib, Lean's mathematics library."
+    ],
+    [
+     "running",
+     "Proposed 3 ideas and picked one by vote: “algebraic manipulation” (3 of 3 votes)."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "done",
+     "Found 16 useful results in Mathlib, Lean's mathematics library."
+    ],
+    [
+     "done",
+     "Proposed 3 ideas and picked one by vote: “algebraic manipulation” (3 of 3 votes)."
+    ],
+    [
+     "running",
+     "Writing the proof in Lean's language…"
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "done",
+     "Found 16 useful results in Mathlib, Lean's mathematics library."
+    ],
+    [
+     "done",
+     "Proposed 3 ideas and picked one by vote: “algebraic manipulation” (3 of 3 votes)."
+    ],
+    [
+     "running",
+     "Writing the proof in Lean's language…"
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "done",
+     "Found 16 useful results in Mathlib, Lean's mathematics library."
+    ],
+    [
+     "done",
+     "Proposed 3 ideas and picked one by vote: “algebraic manipulation” (3 of 3 votes)."
+    ],
+    [
+     "running",
+     "Writing the proof in Lean's language…"
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "done",
+     "Found 16 useful results in Mathlib, Lean's mathematics library."
+    ],
+    [
+     "done",
+     "Proposed 3 ideas and picked one by vote: “algebraic manipulation” (3 of 3 votes)."
+    ],
+    [
+     "done",
+     "Wrote 1 proof attempt(s) in Lean."
+    ],
+    [
+     "running",
+     "Lean rejected attempt 1: Lean found errors."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "done",
+     "Found 16 useful results in Mathlib, Lean's mathematics library."
+    ],
+    [
+     "done",
+     "Proposed 3 ideas and picked one by vote: “algebraic manipulation” (3 of 3 votes)."
+    ],
+    [
+     "done",
+     "Wrote 1 proof attempt(s) in Lean."
+    ],
+    [
+     "running",
+     "Lean rejected attempt 1: it used a result that does not exist in Mathlib."
+    ],
+    [
+     "failed",
+     "This version has no Critic: it stops at the first error (it used a result that does not exist in Mathlib)."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "done",
+     "Found 16 useful results in Mathlib, Lean's mathematics library."
+    ],
+    [
+     "done",
+     "Proposed 3 ideas and picked one by vote: “algebraic manipulation” (3 of 3 votes)."
+    ],
+    [
+     "done",
+     "Wrote 1 proof attempt(s) in Lean."
+    ],
+    [
+     "running",
+     "Lean rejected attempt 1: it used a result that does not exist in Mathlib."
+    ],
+    [
+     "failed",
+     "This version has no Critic: it stops at the first error (it used a result that does not exist in Mathlib)."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "done",
+     "Found 16 useful results in Mathlib, Lean's mathematics library."
+    ],
+    [
+     "done",
+     "Proposed 3 ideas and picked one by vote: “algebraic manipulation” (3 of 3 votes)."
+    ],
+    [
+     "done",
+     "Wrote 1 proof attempt(s) in Lean."
+    ],
+    [
+     "running",
+     "Lean rejected attempt 1: it used a result that does not exist in Mathlib."
+    ],
+    [
+     "failed",
+     "This version has no Critic: it stops at the first error (it used a result that does not exist in Mathlib)."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Split the problem into 2 steps."
+    ],
+    [
+     "done",
+     "Found 16 useful results in Mathlib, Lean's mathematics library."
+    ],
+    [
+     "done",
+     "Proposed 3 ideas and picked one by vote: “algebraic manipulation” (3 of 3 votes)."
+    ],
+    [
+     "done",
+     "Wrote 1 proof attempt(s) in Lean."
+    ],
+    [
+     "failed",
+     "Lean rejected attempt 1: it used a result that does not exist in Mathlib."
+    ],
+    [
+     "failed",
+     "This version has no Critic: it stops at the first error (it used a result that does not exist in Mathlib)."
+    ]
+   ]
+  ]
+ },
+ "title": {
+  "es": "El mismo problema sin Critic",
+  "en": "The same problem without the Critic"
+ },
+ "side": {
+  "es": "Sin Critic",
+  "en": "Without the Critic"
+ },
+ "card": {
+  "es": "<h3>El mismo problema sin Critic</h3>\n<p>Sin Critic, el primer error de Lean termina el intento. En esta grabación las consultas se reutilizaron de una corrida anterior, por eso duró segundos.</p>\n<p><small>Grabado durante el estudio con deepseek-flash.</small></p>\n<p><span class=\"fm-badge fm-badge-medium\">Medio</span> <span class=\"fm-meta\">Álgebra · Ejercicio de práctica (miniF2F)</span><span class=\"fm-eta\">Tiempo aproximado: ≈ 3 min</span></p>\n<p>Show that for any real numbers <span class=\"tex\" data-display=\"0\">a</span> and <span class=\"tex\" data-display=\"0\">b</span>, <span class=\"tex\" data-display=\"0\">\\frac{|a+b|}{1+|a+b|}\\leq \\frac{|a|}{1+|a|}+\\frac{|b|}{1+|b|}</span>.</p>\n<details class=\"fm-lean\"><summary>Ver enunciado en Lean</summary>\n<pre><code class=\"language-lean\">import Mathlib\nimport Aesop\n\nset_option maxHeartbeats 0\n\nopen BigOperators Real Nat Topology Rat\n\ntheorem algebra_absapbon1pabsapbleqsumabsaon1pabsa (a b : ℝ) :\n    abs (a + b) / (1 + abs (a + b)) ≤ abs a / (1 + abs a) + abs b / (1 + abs b) := by\n</code></pre>\n</details>",
+  "en": "<h3>The same problem without the Critic</h3>\n<p>Without the Critic, Lean's first error ends the attempt. In this recording the queries were reused from an earlier run, which is why it took seconds.</p>\n<p><small>Recorded during the study with deepseek-flash.</small></p>\n<p><span class=\"fm-badge fm-badge-medium\">Medium</span> <span class=\"fm-meta\">Algebra · Practice exercise (miniF2F)</span><span class=\"fm-eta\">Approximate time: ≈ 3 min</span></p>\n<p>Show that for any real numbers <span class=\"tex\" data-display=\"0\">a</span> and <span class=\"tex\" data-display=\"0\">b</span>, <span class=\"tex\" data-display=\"0\">\\frac{|a+b|}{1+|a+b|}\\leq \\frac{|a|}{1+|a|}+\\frac{|b|}{1+|b|}</span>.</p>\n<details class=\"fm-lean\"><summary>See the statement in Lean</summary>\n<pre><code class=\"language-lean\">import Mathlib\nimport Aesop\n\nset_option maxHeartbeats 0\n\nopen BigOperators Real Nat Topology Rat\n\ntheorem algebra_absapbon1pabsapbleqsumabsaon1pabsa (a b : ℝ) :\n    abs (a + b) / (1 + abs (a + b)) ≤ abs a / (1 + abs a) + abs b / (1 + abs b) := by\n</code></pre>\n</details>"
+ },
+ "problem": {
+  "es": "<p><span class=\"fm-badge fm-badge-medium\">Medio</span> <span class=\"fm-meta\">Álgebra · Ejercicio de práctica (miniF2F)</span><span class=\"fm-eta\">Tiempo aproximado: ≈ 3 min</span></p>\n<p>Show that for any real numbers <span class=\"tex\" data-display=\"0\">a</span> and <span class=\"tex\" data-display=\"0\">b</span>, <span class=\"tex\" data-display=\"0\">\\frac{|a+b|}{1+|a+b|}\\leq \\frac{|a|}{1+|a|}+\\frac{|b|}{1+|b|}</span>.</p>\n<details class=\"fm-lean\"><summary>Ver enunciado en Lean</summary>\n<pre><code class=\"language-lean\">import Mathlib\nimport Aesop\n\nset_option maxHeartbeats 0\n\nopen BigOperators Real Nat Topology Rat\n\ntheorem algebra_absapbon1pabsapbleqsumabsaon1pabsa (a b : ℝ) :\n    abs (a + b) / (1 + abs (a + b)) ≤ abs a / (1 + abs a) + abs b / (1 + abs b) := by\n</code></pre>\n</details>",
+  "en": "<p><span class=\"fm-badge fm-badge-medium\">Medium</span> <span class=\"fm-meta\">Algebra · Practice exercise (miniF2F)</span><span class=\"fm-eta\">Approximate time: ≈ 3 min</span></p>\n<p>Show that for any real numbers <span class=\"tex\" data-display=\"0\">a</span> and <span class=\"tex\" data-display=\"0\">b</span>, <span class=\"tex\" data-display=\"0\">\\frac{|a+b|}{1+|a+b|}\\leq \\frac{|a|}{1+|a|}+\\frac{|b|}{1+|b|}</span>.</p>\n<details class=\"fm-lean\"><summary>See the statement in Lean</summary>\n<pre><code class=\"language-lean\">import Mathlib\nimport Aesop\n\nset_option maxHeartbeats 0\n\nopen BigOperators Real Nat Topology Rat\n\ntheorem algebra_absapbon1pabsapbleqsumabsaon1pabsa (a b : ℝ) :\n    abs (a + b) / (1 + abs (a + b)) ≤ abs a / (1 + abs a) + abs b / (1 + abs b) := by\n</code></pre>\n</details>"
+ },
+ "result": {
+  "es": "<div class=\"fm-result fm-fail\"><div class=\"fm-result-title\">No se encontró una prueba dentro del presupuesto</div>\n<div class=\"fm-result-note\">El sistema agotó sus intentos o su límite de consultas sin una prueba que Lean aceptara.</div>\n<div class=\"fm-metrics\"><div class=\"fm-metric\"><div class=\"fm-metric-label\">Tiempo</div><div class=\"fm-metric-value\">2 s</div></div><div class=\"fm-metric\"><div class=\"fm-metric-label\">Consultas al modelo</div><div class=\"fm-metric-value\">5</div></div><div class=\"fm-metric\"><div class=\"fm-metric-label\">Costo</div><div class=\"fm-metric-value\">0.0000 USD</div></div></div>\n<div class=\"fm-cache\">5 de 5 consultas se reutilizaron de una corrida anterior (no se volvieron a pedir al modelo).</div>\n</div>",
+  "en": "<div class=\"fm-result fm-fail\"><div class=\"fm-result-title\">No proof was found within the budget</div>\n<div class=\"fm-result-note\">The system used up its attempts or its query limit without a proof that Lean accepted.</div>\n<div class=\"fm-metrics\"><div class=\"fm-metric\"><div class=\"fm-metric-label\">Time</div><div class=\"fm-metric-value\">2 s</div></div><div class=\"fm-metric\"><div class=\"fm-metric-label\">Model queries</div><div class=\"fm-metric-value\">5</div></div><div class=\"fm-metric\"><div class=\"fm-metric-label\">Cost</div><div class=\"fm-metric-value\">0.0000 USD</div></div></div>\n<div class=\"fm-cache\">5 of 5 queries were reused from an earlier run (they were not sent to the model again).</div>\n</div>"
+ }
+}

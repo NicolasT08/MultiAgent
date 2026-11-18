@@ -24,7 +24,8 @@ configs:
 
 45 competition problems stated in Lean 4 (Mathlib), used to evaluate the Formal-MAS multi-agent
 prover. The set was fixed before any tuning on it. Code: https://huggingface.co/NicolasT08/formal-mas
-(retrieval index: https://huggingface.co/datasets/NicolasT08/formal-mas-index)
+(retrieval index: https://huggingface.co/datasets/NicolasT08/formal-mas-index; demo with recorded runs:
+https://huggingface.co/spaces/NicolasT08/formal-mas-demo)
 
 ## Files
 

@@ -18,7 +18,8 @@ viewer: false
 # Formal-MAS retrieval index (Mathlib)
 
 The lemma index used by the Retriever of [Formal-MAS](https://huggingface.co/NicolasT08/formal-mas),
-a multi-agent prover for olympiad problems with Lean 4 verification. It is a prebuilt copy of the
+a multi-agent prover for olympiad problems with Lean 4 verification (demo with recorded runs:
+https://huggingface.co/spaces/NicolasT08/formal-mas-demo). It is a prebuilt copy of the
 repository's `data/index/` folder, so that a new installation does not have to extract the corpus
 from Lean (~15 min) and embed it (~7 min on a GPU, hours on a CPU). `scripts/setup.py` of the code
 repository downloads a pinned revision of this dataset and checks every file's SHA-256

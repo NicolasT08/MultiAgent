@@ -24,7 +24,7 @@ if str(HERE) not in sys.path:
 import gradio as gr  # noqa: E402
 
 import catalog  # noqa: E402
-from i18n import DEFAULT_LANG, has, t  # noqa: E402
+from i18n import DEFAULT_LANG, t  # noqa: E402
 from live import DEMO_RUN_USD, LOAD_STEPS, LiveEngine, live_available  # noqa: E402
 from replay import REPLAY_DIR, frames, load_replays, pair_frames, pairs  # noqa: E402
 from steps import build_steps, result_html, steps_html  # noqa: E402
@@ -132,25 +132,9 @@ def _view(view: dict | None, lang: str, idle: str = "steps.idle") -> tuple[str, 
             result_html(result, events, lang, error=view.get("error"), running=bool(view.get("running"))))
 
 
-def _rep_text(lang: str, key: str, rep: dict, field: str) -> str:
-    k = f"rep.{key}.{field}"
-    return t(lang, k) if has(lang, k) else str(rep.get(field) or key)
-
-
-def _side_title(lang: str, config: str | None) -> str:
-    k = f"ex.side.{config}"
-    return t(lang, k) if has(lang, k) else t(lang, "ex.side.other", config=config)
-
-
-def _model_of(rep: dict) -> str:
-    return ", ".join(sorted({str(m) for m in (rep.get("models") or {}).values()})) or "?"
-
-
-def _example_card(lang: str, key: str, rep: dict) -> str:
-    p = dict(rep.get("problem") or {})
-    note = _rep_text(lang, key, rep, "note")
-    recorded = t(lang, "ex.recorded", model=_model_of(rep))
-    return f"### {_rep_text(lang, key, rep, 'title')}\n\n{note}\n\n<small>{recorded}</small>\n\n" + catalog.card_markdown(p, lang)
+_rep_text = catalog.replay_text  # shared with scripts/build_space.py (the static Space)
+_side_title = catalog.side_title
+_example_card = catalog.example_card
 
 
 # -- app --------------------------------------------------------------------------------

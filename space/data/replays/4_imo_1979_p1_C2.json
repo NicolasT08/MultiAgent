@@ -1,0 +1,1167 @@
+{
+ "key": "4_imo_1979_p1_C2",
+ "config": "C2",
+ "steps": [
+  "solve_nl",
+  "self_check",
+  "translate",
+  "verify"
+ ],
+ "t": [
+  0.0,
+  17.661,
+  31.99,
+  31.99,
+  31.99,
+  31.99,
+  125.14,
+  125.196,
+  125.249,
+  125.249,
+  125.249,
+  276.897,
+  276.898,
+  276.898,
+  282.0,
+  282.0,
+  282.067,
+  282.944,
+  282.945,
+  282.945,
+  440.079,
+  440.173,
+  442.817,
+  442.817,
+  442.817,
+  442.818,
+  442.818
+ ],
+ "owner": [
+  -1,
+  0,
+  0,
+  1,
+  -1,
+  -1,
+  2,
+  2,
+  2,
+  3,
+  3,
+  2,
+  -1,
+  -1,
+  2,
+  -1,
+  2,
+  2,
+  3,
+  3,
+  2,
+  2,
+  2,
+  3,
+  3,
+  3,
+  -1
+ ],
+ "tech": [
+  "",
+  "<p><sub>LLM call 1: <strong>baseline_b</strong> (deepseek-flash) · 17.7 s · $0.0020</sub></p>",
+  "<p><sub>LLM call 2: <strong>baseline_b</strong> (deepseek-flash) · 14.3 s · $0.0016</sub></p>",
+  "<p><strong>Baseline B self-assessment</strong> (same model, no Lean): verdict <strong>correct</strong>, confidence 0.99</p>",
+  "",
+  "",
+  "<p><sub>LLM call 1: <strong>autoformalizer</strong> (deepseek-flash) · 92.8 s · $0.0118</sub></p>",
+  "",
+  "",
+  "<p>✗ <strong>Lean attempt</strong> on subgoal 1: <code>error</code></p>\n<pre><code class=\"language-lean\">exact IMO1979P1.imo_1979_p1 p q h₀ h₁\n</code></pre>\n<pre><code class=\"language-text\">line 10: Unknown identifier `IMO1979P1.imo_1979_p1`\n</code></pre>",
+  "<p>Check attempt 1: <code>lean:error</code> (κ = <code>missing_lemma</code>)</p>",
+  "<p><sub>LLM call 2: <strong>autoformalizer</strong> (deepseek-flash) · 151.1 s · $0.0202</sub></p>",
+  "",
+  "",
+  "<p><sub>LLM call 3: <strong>autoformalizer</strong> (deepseek-flash) · 5.1 s · $0.0008</sub></p>",
+  "",
+  "",
+  "",
+  "<p>✗ <strong>Lean attempt</strong> on subgoal 1: <code>error</code></p>\n<pre><code class=\"language-lean\">let D : ℕ := ∏ k ∈ Finset.Icc 1 1319, k\nlet N : ℤ := ∑ k ∈ Finset.Icc 1 1319, (-1 : ℤ) ^ (k + 1) * (D / k : ℕ)\nhave hDpos : 0 &lt; D := by\n  dsimp [D]\n  rw [Nat.pos_iff_ne_zero]\n  rw [Finset.prod_ne_zero_iff]\n  intro k hk\n  rw [Finset.mem_Icc] at hk\n  omega\nhave hDmod : (D : ZMod 1979) ≠ 0 := by\n  dsimp [D]\n  rw [Nat.cast_prod]\n  rw [Finset.prod_ne_zero_iff]\n  intro k hk\n  rw [Finset.mem_Icc] at hk\n  rw [ZMod.natCast_zmod_eq_zero_iff_dvd]\n  intro hdvd\n  have hle : 1979 ≤ k := Nat.le_of_dvd (by omega) hdvd\n  omega\nhave hsum : (∑ k ∈ Finset.Icc 1 1319, (-1 : ZMod 1979) ^ (k + 1) * (k : ZMod 1979)⁻¹) = 0 := by\n  decide\nhave hNmod : (N : ZMod 1979) = 0 := by\n  dsimp [N]\n  push_cast\n  have hDk : ∀ k ∈ Finset.Icc 1 1319, ((D / k : ℕ) : ZMod 1979) = (D : ZMod 1979) * (k : ZMod 1979)⁻¹ := by\n    intro k hk\n    rw [Finset.mem_Icc] at hk\n    have hkpos : 0 &lt; k := by omega\n    have hkdvd : k ∣ D := by\n      dsimp [D]\n      exact Finset.dvd_prod_of_mem (fun x =&gt; x) hk\n    have hk0 : (k : ZMod 1979) ≠ 0 := by\n      rw [ZMod.natCast_zmod_eq_zero_iff_dvd]\n      intro hdvd\n      have hle : 1979 ≤ k := Nat.le_of_dvd hkpos hdvd\n      omega\n    have hDeq : k * (D / k) = D := by\n      rw [mul_comm]\n      exact Nat.div_mul_cancel hkdvd\n    have hcastDeq : (D : ZMod 1979) = (k : ZMod 1979) * ((D / k : ℕ) : ZMod 1979) := by\n      rw [← hDeq]\n      push_cast\n      ring\n    calc\n      ((D / k : ℕ) : ZMod 1979) = (k : ZMod 1979)⁻¹ * ((k : ZMod 1979) * ((D / k : ℕ) : ZMod 1979)) := by\n</code></pre>\n<pre><code class=\"language-text\">line 22: Tactic `rewrite` failed: Did not find an occurrence of the pattern\n  ∏ x ∈ ?m.168, ?m.167 x ≠ 0\nin the target expression\n  ¬∏ i ∈ Finset.Icc 1 1319, ↑i = 0\n\np q : ℕ\nh₀ : 0 &lt; q\nh₁ : ∑ k ∈ Finset.Icc 1 1319, (-1) ^ (k + 1) * (1 / ↑k) = ↑p / ↑q\nD : ℕ := ∏ k ∈ Finset.Icc 1 1319, k\nN : ℤ := ∑ k ∈ Finset.\n\nline 29: failed to synthesize instance of type class\n  Preorder (ZMod 1979)\n\nHint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.\n\nline 29: failed to synthesize instance of type class\n  LocallyFiniteOrder (ZMod 1979)\n\nHint: Type class instance resolution failures can be inspected with the `set_option trace.Meta.synthInstance true` command.\n</code></pre>",
+  "<p>Check attempt 2: <code>lean:error</code> (κ = <code>syntax</code>)</p>",
+  "<p><sub>LLM call 4: <strong>autoformalizer</strong> (deepseek-flash) · 156.8 s · $0.0198</sub></p>",
+  "",
+  "",
+  "<p>✗ <strong>Lean attempt</strong> on subgoal 1: <code>error</code></p>\n<pre><code class=\"language-lean\">haveI hprime_fact : Fact (Nat.Prime 1979) := ⟨by norm_num⟩\nlet D : ℕ := ∏ k ∈ Finset.Icc (1 : ℕ) 1319, k\nlet N : ℤ := ∑ k ∈ Finset.Icc (1 : ℕ) 1319, (-1 : ℤ) ^ (k + 1) * ((D / k : ℕ) : ℤ)\nhave hDpos : 0 &lt; D := by\n  dsimp [D]\n  apply Finset.prod_pos\n  intro k hk\n  have hk1 := (Finset.mem_Icc.mp hk).1\n  omega\nhave hDmod : (D : ZMod 1979) ≠ 0 := by\n  dsimp [D]\n  push_cast\n  apply Finset.prod_ne_zero_iff.mpr\n  intro k hk\n  rw [ZMod.natCast_zmod_eq_zero_iff_dvd]\n  intro hdvd\n  have hk1 := (Finset.mem_Icc.mp hk).1\n  have hk2 := (Finset.mem_Icc.mp hk).2\n  have hle : 1979 ≤ k := Nat.le_of_dvd (by omega) hdvd\n  omega\nhave hDkZ : ∀ k ∈ Finset.Icc (1 : ℕ) 1319,\n    ((D / k : ℕ) : ZMod 1979) = (D : ZMod 1979) * (k : ZMod 1979)⁻¹ := by\n  intro k hk\n  have hkdvd : k ∣ D := by\n    dsimp [D]\n    exact Finset.dvd_prod_of_mem (fun x =&gt; x) hk\n  have hkpos : 0 &lt; k := by\n    have hk1 := (Finset.mem_Icc.mp hk).1\n    omega\n  have hk0 : (k : ZMod 1979) ≠ 0 := by\n    rw [ZMod.natCast_zmod_eq_zero_iff_dvd]\n    intro hdvd\n    have hle : 1979 ≤ k := Nat.le_of_dvd hkpos hdvd\n    have hk2 := (Finset.mem_Icc.mp hk).2\n    omega\n  have hDeq : k * (D / k) = D := by\n    rw [mul_comm, Nat.div_mul_cancel hkdvd]\n  have hcast : (k : ZMod 1979) * ((D / k : ℕ) : ZMod 1979) = (D : ZMod 1979) := by\n    rw [← hDeq]\n    push_cast\n    ring\n  calc\n    ((D / k : ℕ) : ZMod 1979)\n        = (k : ZMod 1979)⁻¹ * ((k : ZMod 1979) * ((D / k : ℕ) : ZMod 1979)) := by\n            rw [inv_mul_cancel_left₀ hk0]\n    _ = (k : ZMod 1979)⁻¹ * (D : ZMod 1979) := by rw [hcast]\n    _ = (D : ZMod 1979) * (k : ZMod 1979)⁻¹ := by ring\nhave hsum : (∑ k ∈ Finset.Icc (1 : ℕ) 1319, (-1 : ZMod 1979) ^ (k + 1) * (k : ZMod 1979)⁻¹) = 0 := by\n  decide\nhave hNmod : (N : ZMod 1979) = 0 := by\n  dsimp [N]\n  push_cast\n  calc\n    (∑ k ∈ Finset.Icc (1 : ℕ) 1319, (-1 : ZMod 1979) ^ (k + 1) * ((D / k : ℕ) : ZMod 1979))\n        = ∑ k ∈ Finset.Icc (1 : ℕ) 1319, (D : ZMod 1979) * ((-1 : ZMod 1979) ^ (k + 1) * (k : ZMod 1979)⁻¹) := by\n          apply Finset.sum_congr rfl\n          intro k hk\n          rw [hDkZ k hk]\n          ring\n    _ = (D : ZMod 1979) * (∑ k ∈ Finset.Icc (1 : ℕ) 1319, (-1 : ZMod 1979) ^ (k + 1) * (k : ZMod 1979)⁻¹) := by\n          rw [Finset.mul_sum]\n    _ = (D : ZMod 1979) * 0 := by rw [hsum]\n    _ = 0 := by rw [mul_zero]\nhave hDkQ : ∀ k ∈ Finset.Icc (1 : ℕ) 1319,\n    (1 / (k : ℚ)) * (D : ℚ) = ((D / k : ℕ) : ℚ) := by\n  intro k hk\n  have hkdvd : k ∣ D := by\n    dsimp [D]\n    exact Finset.dvd_prod_of_mem (fun x =&gt; x) hk\n  have\n… (truncated)\n</code></pre>\n<pre><code class=\"language-text\">line 24: Unknown constant `ZMod.natCast_zmod_eq_zero_iff_dvd`\n\nline 40: Unknown constant `ZMod.natCast_zmod_eq_zero_iff_dvd`\n\nline 47: unsolved goals\np q : ℕ\nh₀ : 0 &lt; q\nh₁ : ∑ k ∈ Finset.Icc 1 1319, (-1) ^ (k + 1) * (1 / ↑k) = ↑p / ↑q\nhprime_fact : Fact (Nat.Prime 1979)\nD : ℕ := ∏ k ∈ Finset.Icc 1 1319, k\nN : ℤ := ∑ k ∈ Finset.Icc 1 1319, (-1) ^ (k + 1) * ↑(D / k)\nhDpos : 0 &lt; D\nhDmod : ↑D ≠ 0\nk : ℕ\nhk : k ∈ Finset.Icc 1 1319\nhkdvd \n</code></pre>",
+  "<p>Check attempt 3: <code>lean:error</code> (κ = <code>syntax</code>)</p>",
+  "<p><strong>Claim check</strong>: <code>not_verified</code> — <strong>not confirmed by Lean</strong> ✗ (which is not the same as incorrect)</p>",
+  ""
+ ],
+ "frames": {
+  "es": [
+   [
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Escribiendo una solución en palabras…"
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Escribiendo una solución en palabras…"
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "pending",
+     "En espera."
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "running",
+     "Escribiendo la prueba en el lenguaje de Lean…"
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "running",
+     "Escribiendo la prueba en el lenguaje de Lean…"
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "running",
+     "Escribiendo la prueba en el lenguaje de Lean…"
+    ],
+    [
+     "pending",
+     "En espera."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "done",
+     "Escribió 1 intento(s) de prueba en Lean."
+    ],
+    [
+     "redo",
+     "Lean rechazó el intento 1: Lean encontró errores."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "done",
+     "Escribió 1 intento(s) de prueba en Lean."
+    ],
+    [
+     "redo",
+     "Lean rechazó el intento 1: usó un resultado que no existe en Mathlib."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "running",
+     "Escribiendo la prueba en el lenguaje de Lean…"
+    ],
+    [
+     "redo",
+     "Lean rechazó el intento 1: usó un resultado que no existe en Mathlib."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "running",
+     "Escribiendo la prueba en el lenguaje de Lean…"
+    ],
+    [
+     "redo",
+     "Lean rechazó el intento 1: usó un resultado que no existe en Mathlib."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "running",
+     "Escribiendo la prueba en el lenguaje de Lean…"
+    ],
+    [
+     "redo",
+     "Lean rechazó el intento 1: usó un resultado que no existe en Mathlib."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "running",
+     "Escribiendo la prueba en el lenguaje de Lean…"
+    ],
+    [
+     "redo",
+     "Lean rechazó el intento 1: usó un resultado que no existe en Mathlib."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "running",
+     "Escribiendo la prueba en el lenguaje de Lean…"
+    ],
+    [
+     "redo",
+     "Lean rechazó el intento 1: usó un resultado que no existe en Mathlib."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "running",
+     "Escribiendo la prueba en el lenguaje de Lean…"
+    ],
+    [
+     "redo",
+     "Lean rechazó el intento 1: usó un resultado que no existe en Mathlib."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "running",
+     "Escribiendo la prueba en el lenguaje de Lean…"
+    ],
+    [
+     "redo",
+     "Lean rechazó el intento 1: usó un resultado que no existe en Mathlib."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "done",
+     "Escribió 1 intento(s) de prueba en Lean."
+    ],
+    [
+     "redo",
+     "Lean rechazó el intento 1: Lean encontró errores."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "done",
+     "Escribió 2 intento(s) de prueba en Lean."
+    ],
+    [
+     "redo",
+     "Lean rechazó el intento 2: el texto no era código de Lean válido."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "running",
+     "Escribiendo la prueba en el lenguaje de Lean…"
+    ],
+    [
+     "redo",
+     "Lean rechazó el intento 2: el texto no era código de Lean válido."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "running",
+     "Escribiendo la prueba en el lenguaje de Lean…"
+    ],
+    [
+     "redo",
+     "Lean rechazó el intento 2: el texto no era código de Lean válido."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "running",
+     "Escribiendo la prueba en el lenguaje de Lean…"
+    ],
+    [
+     "redo",
+     "Lean rechazó el intento 2: el texto no era código de Lean válido."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "done",
+     "Escribió 2 intento(s) de prueba en Lean."
+    ],
+    [
+     "redo",
+     "Lean rechazó el intento 2: Lean encontró errores."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "done",
+     "Escribió 3 intento(s) de prueba en Lean."
+    ],
+    [
+     "redo",
+     "Lean rechazó el intento 3: el texto no era código de Lean válido."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "done",
+     "Escribió 3 intento(s) de prueba en Lean."
+    ],
+    [
+     "failed",
+     "Lean no confirmó la solución en 3 intento(s)."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "done",
+     "Escribió 3 intento(s) de prueba en Lean."
+    ],
+    [
+     "failed",
+     "Lean no confirmó la solución en 3 intento(s)."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Escribió una solución en lenguaje natural (sin Lean)."
+    ],
+    [
+     "done",
+     "Se revisó a sí misma: dice que la solución es correcta (confianza 99 %)."
+    ],
+    [
+     "done",
+     "Escribió 3 intento(s) de prueba en Lean."
+    ],
+    [
+     "failed",
+     "Lean no confirmó la solución en 3 intento(s)."
+    ]
+   ]
+  ],
+  "en": [
+   [
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Writing a solution in words…"
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "running",
+     "Writing a solution in words…"
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "running",
+     "Writing the proof in Lean's language…"
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "running",
+     "Writing the proof in Lean's language…"
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "running",
+     "Writing the proof in Lean's language…"
+    ],
+    [
+     "pending",
+     "Waiting."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "done",
+     "Wrote 1 proof attempt(s) in Lean."
+    ],
+    [
+     "redo",
+     "Lean rejected attempt 1: Lean found errors."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "done",
+     "Wrote 1 proof attempt(s) in Lean."
+    ],
+    [
+     "redo",
+     "Lean rejected attempt 1: it used a result that does not exist in Mathlib."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "running",
+     "Writing the proof in Lean's language…"
+    ],
+    [
+     "redo",
+     "Lean rejected attempt 1: it used a result that does not exist in Mathlib."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "running",
+     "Writing the proof in Lean's language…"
+    ],
+    [
+     "redo",
+     "Lean rejected attempt 1: it used a result that does not exist in Mathlib."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "running",
+     "Writing the proof in Lean's language…"
+    ],
+    [
+     "redo",
+     "Lean rejected attempt 1: it used a result that does not exist in Mathlib."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "running",
+     "Writing the proof in Lean's language…"
+    ],
+    [
+     "redo",
+     "Lean rejected attempt 1: it used a result that does not exist in Mathlib."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "running",
+     "Writing the proof in Lean's language…"
+    ],
+    [
+     "redo",
+     "Lean rejected attempt 1: it used a result that does not exist in Mathlib."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "running",
+     "Writing the proof in Lean's language…"
+    ],
+    [
+     "redo",
+     "Lean rejected attempt 1: it used a result that does not exist in Mathlib."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "running",
+     "Writing the proof in Lean's language…"
+    ],
+    [
+     "redo",
+     "Lean rejected attempt 1: it used a result that does not exist in Mathlib."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "done",
+     "Wrote 1 proof attempt(s) in Lean."
+    ],
+    [
+     "redo",
+     "Lean rejected attempt 1: Lean found errors."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "done",
+     "Wrote 2 proof attempt(s) in Lean."
+    ],
+    [
+     "redo",
+     "Lean rejected attempt 2: the text was not valid Lean code."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "running",
+     "Writing the proof in Lean's language…"
+    ],
+    [
+     "redo",
+     "Lean rejected attempt 2: the text was not valid Lean code."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "running",
+     "Writing the proof in Lean's language…"
+    ],
+    [
+     "redo",
+     "Lean rejected attempt 2: the text was not valid Lean code."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "running",
+     "Writing the proof in Lean's language…"
+    ],
+    [
+     "redo",
+     "Lean rejected attempt 2: the text was not valid Lean code."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "done",
+     "Wrote 2 proof attempt(s) in Lean."
+    ],
+    [
+     "redo",
+     "Lean rejected attempt 2: Lean found errors."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "done",
+     "Wrote 3 proof attempt(s) in Lean."
+    ],
+    [
+     "redo",
+     "Lean rejected attempt 3: the text was not valid Lean code."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "done",
+     "Wrote 3 proof attempt(s) in Lean."
+    ],
+    [
+     "failed",
+     "Lean did not confirm the solution in 3 attempt(s)."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "done",
+     "Wrote 3 proof attempt(s) in Lean."
+    ],
+    [
+     "failed",
+     "Lean did not confirm the solution in 3 attempt(s)."
+    ]
+   ],
+   [
+    [
+     "done",
+     "Wrote a solution in natural language (no Lean)."
+    ],
+    [
+     "done",
+     "Checked itself: it says the solution is correct (confidence 99 %)."
+    ],
+    [
+     "done",
+     "Wrote 3 proof attempt(s) in Lean."
+    ],
+    [
+     "failed",
+     "Lean did not confirm the solution in 3 attempt(s)."
+    ]
+   ]
+  ]
+ },
+ "title": {
+  "es": "La IA dice que lo resolvió; Lean no lo confirma",
+  "en": "The AI says it solved it; Lean does not confirm it"
+ },
+ "side": {
+  "es": "Versión C2",
+  "en": "Version C2"
+ },
+ "card": {
+  "es": "<h3>La IA dice que lo resolvió; Lean no lo confirma</h3>\n<p>Sin Lean, la IA escribe una solución y se califica a sí misma como correcta. Al verificarla, Lean no la confirma. No confirmado no quiere decir incorrecto, pero solo Lean puede decidirlo.</p>\n<p><small>Grabado durante el estudio con deepseek-flash.</small></p>\n<p><span class=\"fm-badge fm-badge-hard\">Difícil</span> <span class=\"fm-meta\">Teoría de números · IMO 1979 · Problema 1</span><span class=\"fm-eta\">Tiempo aproximado: ≈ 15 min</span></p>\n<p>If <span class=\"tex\" data-display=\"0\">p</span> and <span class=\"tex\" data-display=\"0\">q</span> are natural numbers so that<span class=\"tex\" data-display=\"0\">\\frac{p}{q}=1-\\frac{1}{2}+\\frac{1}{3}-\\frac{1}{4}+ \\ldots -\\frac{1}{1318}+\\frac{1}{1319},</span>prove that <span class=\"tex\" data-display=\"0\">p</span> is divisible with <span class=\"tex\" data-display=\"0\">1979</span>.</p>\n<details class=\"fm-lean\"><summary>Ver enunciado en Lean</summary>\n<pre><code class=\"language-lean\">import Mathlib\nimport Aesop\n\nset_option maxHeartbeats 0\n\nopen BigOperators Real Nat Topology Rat\n\ntheorem imo_1979_p1 (p q : ℕ) (h₀ : 0 &lt; q)\n  (h₁ : (∑ k ∈ Finset.Icc (1 : ℕ) 1319, (-1) ^ (k + 1) * ((1 : ℝ) / k)) = p / q) : 1979 ∣ p := by\n</code></pre>\n</details>",
+  "en": "<h3>The AI says it solved it; Lean does not confirm it</h3>\n<p>Without Lean, the AI writes a solution and grades itself as correct. When it is checked, Lean does not confirm it. Not confirmed does not mean wrong, but only Lean can decide.</p>\n<p><small>Recorded during the study with deepseek-flash.</small></p>\n<p><span class=\"fm-badge fm-badge-hard\">Hard</span> <span class=\"fm-meta\">Number theory · IMO 1979 · Problem 1</span><span class=\"fm-eta\">Approximate time: ≈ 15 min</span></p>\n<p>If <span class=\"tex\" data-display=\"0\">p</span> and <span class=\"tex\" data-display=\"0\">q</span> are natural numbers so that<span class=\"tex\" data-display=\"0\">\\frac{p}{q}=1-\\frac{1}{2}+\\frac{1}{3}-\\frac{1}{4}+ \\ldots -\\frac{1}{1318}+\\frac{1}{1319},</span>prove that <span class=\"tex\" data-display=\"0\">p</span> is divisible with <span class=\"tex\" data-display=\"0\">1979</span>.</p>\n<details class=\"fm-lean\"><summary>See the statement in Lean</summary>\n<pre><code class=\"language-lean\">import Mathlib\nimport Aesop\n\nset_option maxHeartbeats 0\n\nopen BigOperators Real Nat Topology Rat\n\ntheorem imo_1979_p1 (p q : ℕ) (h₀ : 0 &lt; q)\n  (h₁ : (∑ k ∈ Finset.Icc (1 : ℕ) 1319, (-1) ^ (k + 1) * ((1 : ℝ) / k)) = p / q) : 1979 ∣ p := by\n</code></pre>\n</details>"
+ },
+ "problem": {
+  "es": "<p><span class=\"fm-badge fm-badge-hard\">Difícil</span> <span class=\"fm-meta\">Teoría de números · IMO 1979 · Problema 1</span><span class=\"fm-eta\">Tiempo aproximado: ≈ 15 min</span></p>\n<p>If <span class=\"tex\" data-display=\"0\">p</span> and <span class=\"tex\" data-display=\"0\">q</span> are natural numbers so that<span class=\"tex\" data-display=\"0\">\\frac{p}{q}=1-\\frac{1}{2}+\\frac{1}{3}-\\frac{1}{4}+ \\ldots -\\frac{1}{1318}+\\frac{1}{1319},</span>prove that <span class=\"tex\" data-display=\"0\">p</span> is divisible with <span class=\"tex\" data-display=\"0\">1979</span>.</p>\n<details class=\"fm-lean\"><summary>Ver enunciado en Lean</summary>\n<pre><code class=\"language-lean\">import Mathlib\nimport Aesop\n\nset_option maxHeartbeats 0\n\nopen BigOperators Real Nat Topology Rat\n\ntheorem imo_1979_p1 (p q : ℕ) (h₀ : 0 &lt; q)\n  (h₁ : (∑ k ∈ Finset.Icc (1 : ℕ) 1319, (-1) ^ (k + 1) * ((1 : ℝ) / k)) = p / q) : 1979 ∣ p := by\n</code></pre>\n</details>",
+  "en": "<p><span class=\"fm-badge fm-badge-hard\">Hard</span> <span class=\"fm-meta\">Number theory · IMO 1979 · Problem 1</span><span class=\"fm-eta\">Approximate time: ≈ 15 min</span></p>\n<p>If <span class=\"tex\" data-display=\"0\">p</span> and <span class=\"tex\" data-display=\"0\">q</span> are natural numbers so that<span class=\"tex\" data-display=\"0\">\\frac{p}{q}=1-\\frac{1}{2}+\\frac{1}{3}-\\frac{1}{4}+ \\ldots -\\frac{1}{1318}+\\frac{1}{1319},</span>prove that <span class=\"tex\" data-display=\"0\">p</span> is divisible with <span class=\"tex\" data-display=\"0\">1979</span>.</p>\n<details class=\"fm-lean\"><summary>See the statement in Lean</summary>\n<pre><code class=\"language-lean\">import Mathlib\nimport Aesop\n\nset_option maxHeartbeats 0\n\nopen BigOperators Real Nat Topology Rat\n\ntheorem imo_1979_p1 (p q : ℕ) (h₀ : 0 &lt; q)\n  (h₁ : (∑ k ∈ Finset.Icc (1 : ℕ) 1319, (-1) ^ (k + 1) * ((1 : ℝ) / k)) = p / q) : 1979 ∣ p := by\n</code></pre>\n</details>"
+ },
+ "result": {
+  "es": "<div class=\"fm-result fm-warn\"><div class=\"fm-result-title\">⚠ La IA afirmó haberlo resuelto, pero Lean no lo confirmó</div>\n<div class=\"fm-result-note\">No confirmado no quiere decir incorrecto: puede ser un argumento equivocado o uno correcto que no se pudo traducir. Sin Lean no hay forma de distinguirlos.</div>\n<div class=\"fm-metrics\"><div class=\"fm-metric\"><div class=\"fm-metric-label\">Tiempo</div><div class=\"fm-metric-value\">7.4 min</div></div><div class=\"fm-metric\"><div class=\"fm-metric-label\">Consultas al modelo</div><div class=\"fm-metric-value\">2</div></div><div class=\"fm-metric\"><div class=\"fm-metric-label\">Costo</div><div class=\"fm-metric-value\">0.0036 USD</div></div></div>\n</div>\n<details class=\"fm-proof\"><summary>Ver la solución escrita por la IA</summary>\n<p>Let\n<span class=\"tex\" data-display=\"1\">S=\\sum_{k=1}^{1319}\\frac{(-1)^{k+1}}{k}\n=1-\\frac12+\\frac13-\\cdots-\\frac1{1318}+\\frac1{1319}.</span>\nSince the even terms are <span class=\"tex\" data-display=\"0\">k=2j</span> with <span class=\"tex\" data-display=\"0\">1\\le j\\le 659</span>, we have\n<span class=\"tex\" data-display=\"1\">S=H_{1319}-H_{659},</span>\nwhere <span class=\"tex\" data-display=\"0\">H_n=\\sum_{k=1}^n\\frac1k</span>.</p>\n<p>First note that <span class=\"tex\" data-display=\"0\">1979</span> is prime; indeed its square root is less than <span class=\"tex\" data-display=\"0\">45</span>, and it is not divisible by any prime <span class=\"tex\" data-display=\"0\">2,3,5,7,11,13,17,19,23,29,31,37,41,43</span>.</p>\n<p>Work modulo the prime <span class=\"tex\" data-display=\"0\">1979</span>. In <span class=\"tex\" data-display=\"0\">\\mathbb F_{1979}</span>,\n<span class=\"tex\" data-display=\"1\">H_{1978}=\\sum_{k=1}^{1978}\\frac1k\\equiv \\sum_{k=1}^{1978}k=\\frac{1978\\cdot1979}{2}\\equiv0\\pmod{1979},</span>\nbecause inversion permutes the nonzero residues modulo <span class=\"tex\" data-display=\"0\">1979</span>.</p>\n<p>Thus\n<span class=\"tex\" data-display=\"1\">H_{1319}\\equiv -\\sum_{k=1320}^{1978}\\frac1k\\pmod{1979}.</span>\nPut <span class=\"tex\" data-display=\"0\">j=1979-k</span>. As <span class=\"tex\" data-display=\"0\">k</span> runs from <span class=\"tex\" data-display=\"0\">1320</span> to <span class=\"tex\" data-display=\"0\">1978</span>, <span class=\"tex\" data-display=\"0\">j</span> runs from <span class=\"tex\" data-display=\"0\">659</span> down to <span class=\"tex\" data-display=\"0\">1</span>, and\n<span class=\"tex\" data-display=\"1\">\\frac1k=\\frac1{1979-j}\\equiv -\\frac1j\\pmod{1979}.</span>\nTherefore\n<span class=\"tex\" data-display=\"1\">\\sum_{k=1320}^{1978}\\frac1k\\equiv -\\sum_{j=1}^{659}\\frac1j=-H_{659}\\pmod{1979}.</span>\nHence\n<span class=\"tex\" data-display=\"1\">H_{1319}\\equiv H_{659}\\pmod{1979},</span>\nso\n<span class=\"tex\" data-display=\"1\">S=H_{1319}-H_{659}\\equiv0\\pmod{1979}.</span></p>\n<p>Now <span class=\"tex\" data-display=\"0\">S=p/q</span> with <span class=\"tex\" data-display=\"0\">0&lt;q</span>. All denominators occurring in <span class=\"tex\" data-display=\"0\">S</span> are less than <span class=\"tex\" data-display=\"0\">1979</span>, so when <span class=\"tex\" data-display=\"0\">S</span> is written in lowest terms, its denominator is not divisible by <span class=\"tex\" data-display=\"0\">1979</span>. Equivalently, if <span class=\"tex\" data-display=\"0\">S=N/D</span> with <span class=\"tex\" data-display=\"0\">1979\\nmid D</span>, then <span class=\"tex\" data-display=\"0\">S\\equiv0\\pmod{1979}</span> implies <span class=\"tex\" data-display=\"0\">1979\\mid N</span>. Since <span class=\"tex\" data-display=\"0\">p/q=N/D</span>, we have <span class=\"tex\" data-display=\"0\">pD=Nq</span>. Because <span class=\"tex\" data-display=\"0\">1979\\nmid D</span> and <span class=\"tex\" data-display=\"0\">1979\\mid N</span>, it follows that <span class=\"tex\" data-display=\"0\">1979\\mid p</span>.</p>\n<p>Therefore <span class=\"tex\" data-display=\"0\">1979</span> divides <span class=\"tex\" data-display=\"0\">p</span>.</p>\n<p><strong>Respuesta final que afirmó: 1979 divides p.</strong></p>\n</details>",
+  "en": "<div class=\"fm-result fm-warn\"><div class=\"fm-result-title\">⚠ The AI claimed to have solved it, but Lean did not confirm it</div>\n<div class=\"fm-result-note\">Not confirmed does not mean wrong: it may be a flawed argument or a correct one that could not be translated. Without Lean there is no way to tell them apart.</div>\n<div class=\"fm-metrics\"><div class=\"fm-metric\"><div class=\"fm-metric-label\">Time</div><div class=\"fm-metric-value\">7.4 min</div></div><div class=\"fm-metric\"><div class=\"fm-metric-label\">Model queries</div><div class=\"fm-metric-value\">2</div></div><div class=\"fm-metric\"><div class=\"fm-metric-label\">Cost</div><div class=\"fm-metric-value\">0.0036 USD</div></div></div>\n</div>\n<details class=\"fm-proof\"><summary>See the solution written by the AI</summary>\n<p>Let\n<span class=\"tex\" data-display=\"1\">S=\\sum_{k=1}^{1319}\\frac{(-1)^{k+1}}{k}\n=1-\\frac12+\\frac13-\\cdots-\\frac1{1318}+\\frac1{1319}.</span>\nSince the even terms are <span class=\"tex\" data-display=\"0\">k=2j</span> with <span class=\"tex\" data-display=\"0\">1\\le j\\le 659</span>, we have\n<span class=\"tex\" data-display=\"1\">S=H_{1319}-H_{659},</span>\nwhere <span class=\"tex\" data-display=\"0\">H_n=\\sum_{k=1}^n\\frac1k</span>.</p>\n<p>First note that <span class=\"tex\" data-display=\"0\">1979</span> is prime; indeed its square root is less than <span class=\"tex\" data-display=\"0\">45</span>, and it is not divisible by any prime <span class=\"tex\" data-display=\"0\">2,3,5,7,11,13,17,19,23,29,31,37,41,43</span>.</p>\n<p>Work modulo the prime <span class=\"tex\" data-display=\"0\">1979</span>. In <span class=\"tex\" data-display=\"0\">\\mathbb F_{1979}</span>,\n<span class=\"tex\" data-display=\"1\">H_{1978}=\\sum_{k=1}^{1978}\\frac1k\\equiv \\sum_{k=1}^{1978}k=\\frac{1978\\cdot1979}{2}\\equiv0\\pmod{1979},</span>\nbecause inversion permutes the nonzero residues modulo <span class=\"tex\" data-display=\"0\">1979</span>.</p>\n<p>Thus\n<span class=\"tex\" data-display=\"1\">H_{1319}\\equiv -\\sum_{k=1320}^{1978}\\frac1k\\pmod{1979}.</span>\nPut <span class=\"tex\" data-display=\"0\">j=1979-k</span>. As <span class=\"tex\" data-display=\"0\">k</span> runs from <span class=\"tex\" data-display=\"0\">1320</span> to <span class=\"tex\" data-display=\"0\">1978</span>, <span class=\"tex\" data-display=\"0\">j</span> runs from <span class=\"tex\" data-display=\"0\">659</span> down to <span class=\"tex\" data-display=\"0\">1</span>, and\n<span class=\"tex\" data-display=\"1\">\\frac1k=\\frac1{1979-j}\\equiv -\\frac1j\\pmod{1979}.</span>\nTherefore\n<span class=\"tex\" data-display=\"1\">\\sum_{k=1320}^{1978}\\frac1k\\equiv -\\sum_{j=1}^{659}\\frac1j=-H_{659}\\pmod{1979}.</span>\nHence\n<span class=\"tex\" data-display=\"1\">H_{1319}\\equiv H_{659}\\pmod{1979},</span>\nso\n<span class=\"tex\" data-display=\"1\">S=H_{1319}-H_{659}\\equiv0\\pmod{1979}.</span></p>\n<p>Now <span class=\"tex\" data-display=\"0\">S=p/q</span> with <span class=\"tex\" data-display=\"0\">0&lt;q</span>. All denominators occurring in <span class=\"tex\" data-display=\"0\">S</span> are less than <span class=\"tex\" data-display=\"0\">1979</span>, so when <span class=\"tex\" data-display=\"0\">S</span> is written in lowest terms, its denominator is not divisible by <span class=\"tex\" data-display=\"0\">1979</span>. Equivalently, if <span class=\"tex\" data-display=\"0\">S=N/D</span> with <span class=\"tex\" data-display=\"0\">1979\\nmid D</span>, then <span class=\"tex\" data-display=\"0\">S\\equiv0\\pmod{1979}</span> implies <span class=\"tex\" data-display=\"0\">1979\\mid N</span>. Since <span class=\"tex\" data-display=\"0\">p/q=N/D</span>, we have <span class=\"tex\" data-display=\"0\">pD=Nq</span>. Because <span class=\"tex\" data-display=\"0\">1979\\nmid D</span> and <span class=\"tex\" data-display=\"0\">1979\\mid N</span>, it follows that <span class=\"tex\" data-display=\"0\">1979\\mid p</span>.</p>\n<p>Therefore <span class=\"tex\" data-display=\"0\">1979</span> divides <span class=\"tex\" data-display=\"0\">p</span>.</p>\n<p><strong>Final answer it claimed: 1979 divides p.</strong></p>\n</details>"
+ }
+}

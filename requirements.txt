@@ -24,3 +24,5 @@ openai==3.39.0
 langgraph==1.2.19
 # Phase 9 — analysis figures (docs/results/make_tables.py → docs/results/figures/).
 matplotlib==3.11.2
+# Phase 9 — static Space: Markdown → HTML in scripts/build_space.py (space/data/).
+markdown-it-py==4.2.0

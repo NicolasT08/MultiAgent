@@ -3,6 +3,7 @@
     python scripts/publish_hf.py code            # dry run: what would change in NicolasT08/formal-mas
     python scripts/publish_hf.py index           # dry run: NicolasT08/formal-mas-index (data/index/)
     python scripts/publish_hf.py eval            # dry run: NicolasT08/formal-mas-eval (set + runs)
+    python scripts/publish_hf.py space           # dry run: Space NicolasT08/formal-mas-demo (static page)
     python scripts/publish_hf.py code --upload   # stage, scan, show the diff, ask, then upload
 
 Targets:
@@ -15,6 +16,11 @@ Targets:
   eval   the evaluation set and results already published (from git at --ref) + the run folders
          of RUN_FOLDERS + the spend ledger (runs/spend_ledger.jsonl) + the card
          docs/hf/formal-mas-eval.md (+ its LICENSE.md). scripts/download_runs.py fetches them back into runs/.
+  space  the static Space (sdk: static, no Gradio, no Python on the server): the files of
+         SPACE_FILES under space/, from git at --ref (or the working tree with --worktree, to
+         preview before committing) + the card docs/hf/formal-mas-demo.md as README.md. space/data/
+         must be exactly what scripts/build_space.py builds now, and space/ must hold no other file.
+         No secret or variable is ever set on the Space: the page needs none.
 
 Every staged file goes through the same transformations and checks:
   * the informal text of the PutnamBench problems is replaced by a reference to the problem
@@ -45,7 +51,8 @@ CARDS = ROOT / "docs" / "hf"
 OWNER = "NicolasT08"
 REPOS = {"code": (f"{OWNER}/formal-mas", "model"),
          "index": (f"{OWNER}/formal-mas-index", "dataset"),
-         "eval": (f"{OWNER}/formal-mas-eval", "dataset")}
+         "eval": (f"{OWNER}/formal-mas-eval", "dataset"),
+         "space": (f"{OWNER}/formal-mas-demo", "space")}
 
 # -- what is published ----------------------------------------------------------------------
 EXCLUDED_CODE = {"docs/report/Proyecto_Inteligencia.pdf"}  # course document, not part of the code
@@ -73,6 +80,14 @@ RUN_FOLDERS = [
 RUN_FILES = {"results.jsonl", "trace.jsonl", "run_config.json", "console.log", "test_remaining.jsonl",
              "C1_test_merged_results.jsonl"}
 LEDGER = ROOT / "data" / "spend_ledger.jsonl"
+SPACE = ROOT / "space"
+SPACE_FILES = [  # paths under space/: the page, and the data of scripts/build_space.py
+    "index.html", "app.js", "style.css",
+    "data/i18n.json", "data/site.json",
+    "data/replays/1_amc12_2001_p9_C5.json", "data/replays/2_imo_1964_p1_2_C5.json",
+    "data/replays/3_algebra_absapb_C5.json", "data/replays/3b_algebra_absapb_C4.json",
+    "data/replays/4_imo_1979_p1_C2.json",
+]
 CODE_FRONT_MATTER = """---
 license: mit
 library_name: formal-mas
@@ -109,7 +124,7 @@ SECRET_PATTERNS = {
 }
 EMAIL_OK = re.compile(r"(?i)@(?:example\.(?:com|org)|anthropic\.com|users\.noreply\.github\.com)$|^noreply@")
 TEXT_SUFFIXES = {".py", ".md", ".txt", ".json", ".jsonl", ".yaml", ".yml", ".toml", ".lean", ".sh", ".tex",
-                 ".log", ".cfg", ".ini", ".example", ".gitignore", ".csv", ""}
+                 ".log", ".cfg", ".ini", ".example", ".gitignore", ".csv", ".html", ".js", ".css", ""}
 WINDOW, STEP = 40, 20
 
 
@@ -321,6 +336,47 @@ def stage_eval(ref: str, putnam: dict[str, str]) -> list[Staged]:
     return out
 
 
+def _build_space_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("build_space", ROOT / "scripts" / "build_space.py")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules.setdefault("publish_hf", sys.modules[__name__])
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def space_files_present(ref: str | None) -> set[str]:
+    """Paths under space/ (relative to it) in git at `ref`, or in the working tree if ref is None."""
+    if ref is None:
+        return {p.relative_to(SPACE).as_posix() for p in SPACE.rglob("*") if p.is_file()}
+    return {p[len("space/"):] for p in git_files(ref) if p.startswith("space/")}
+
+
+def stage_space(ref: str | None, putnam: dict[str, str]) -> list[Staged]:
+    """SPACE_FILES from git at `ref` (None: the working tree) + the Space card as README.md."""
+    present = space_files_present(ref)
+    unexpected = sorted(present - set(SPACE_FILES))
+    if unexpected:
+        raise PublishError("space/ holds files outside SPACE_FILES: " + ", ".join(unexpected))
+    missing = sorted(set(SPACE_FILES) - present)
+    if missing:
+        where = "the working tree" if ref is None else ref
+        raise PublishError(f"missing in {where}: " + ", ".join("space/" + p for p in missing)
+                           + " (run scripts/build_space.py, then commit)")
+    out = []
+    for p in SPACE_FILES:
+        # the working tree may have CRLF (core.autocrlf); git and the Hub get LF
+        data = (SPACE / p).read_bytes().replace(b"\r\n", b"\n") if ref is None else git("show", f"{ref}:space/{p}")
+        out.append(Staged(p, data=transform(p, data, putnam)))
+    built = _build_space_module().build()
+    stale = sorted(s.path for s in out if s.path.startswith("data/") and built.get(s.path) != s.data)
+    if stale or set(built) - {s.path for s in out}:
+        raise PublishError("space/data/ is not what scripts/build_space.py builds now: "
+                           + ", ".join(stale or sorted(set(built) - {s.path for s in out})))
+    out.append(Staged("README.md", data=(CARDS / "formal-mas-demo.md").read_bytes()))
+    return out
+
+
 # -- diff and upload ------------------------------------------------------------------------
 
 def remote_state(api, repo: str, rtype: str) -> tuple[dict[str, tuple[str, str]], str | None]:
@@ -375,9 +431,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--prune", action="store_true", help="also delete remote files that are not staged")
     ap.add_argument("--message", help="commit message on the Hub")
     ap.add_argument("--list", action="store_true", help="print every staged file")
+    ap.add_argument("--worktree", action="store_true", help="space: take space/ from the working tree, not git")
     a = ap.parse_args(argv)
     from huggingface_hub import CommitOperationAdd, CommitOperationDelete, HfApi
 
+    if a.worktree and (a.upload or a.target != "space"):
+        ap.error("--worktree is a preview of the space target only; uploads come from git (--ref)")
     repo, rtype = REPOS[a.target]
     putnam = putnam_informal()
     try:
@@ -385,6 +444,8 @@ def main(argv: list[str] | None = None) -> int:
             staged = stage_code(a.ref, putnam)
         elif a.target == "index":
             staged = stage_index()
+        elif a.target == "space":
+            staged = stage_space(None if a.worktree else a.ref, putnam)
         else:
             staged = stage_eval(a.ref, putnam)
     except PublishError as exc:
@@ -401,7 +462,7 @@ def main(argv: list[str] | None = None) -> int:
     api = HfApi()
     remote, head = remote_state(api, repo, rtype)
     added, changed, same, remote_only = diff(staged, remote)
-    kind = "dataset" if rtype == "dataset" else "model"
+    kind = {"dataset": "dataset", "space": "static Space"}.get(rtype, "model")
     print(f"\n{repo} ({kind}; {'new repository' if head is None else 'head ' + head[:12]})")
     print(f"staged {len(staged)} files, {human(sum(s.size() for s in staged))}")
     if a.list:
@@ -433,11 +494,13 @@ def main(argv: list[str] | None = None) -> int:
         if answer.strip() != repo:
             print("cancelled.")
             return 1
-    if head is None:
-        api.create_repo(repo, repo_type=rtype, exist_ok=True)
+    if head is None:  # a Space is created static; no secret or variable is ever set on it
+        api.create_repo(repo, repo_type=rtype, exist_ok=True,
+                        **({"space_sdk": "static"} if rtype == "space" else {}))
     msg = a.message or {"code": f"Sync code from git {git('rev-parse', '--short', a.ref).decode().strip()}",
                         "index": "Retrieval index (data/index/)",
-                        "eval": "Run logs used by the analysis tables"}[a.target]
+                        "eval": "Run logs used by the analysis tables",
+                        "space": "Static demo page (scripts/build_space.py)"}[a.target]
     info = api.create_commit(repo, operations=ops, commit_message=msg, repo_type=rtype)
     print(f"uploaded: {info.commit_url}")
     if a.target == "index":
