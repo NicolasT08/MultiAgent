@@ -7,7 +7,7 @@ sdk: static
 app_file: index.html
 pinned: false
 license: mit
-short_description: Recorded runs of AI agents proving olympiad problems in Lean 4
+short_description: Multi-agent olympiad prover verified by Lean 4 (replays)
 ---
 
 # Formal-MAS: recorded runs

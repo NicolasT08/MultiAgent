@@ -377,6 +377,65 @@ def stage_space(ref: str | None, putnam: dict[str, str]) -> list[Staged]:
     return out
 
 
+# -- card metadata (README.md front matter) ---------------------------------------------------
+# Limits the Hub enforces on upload (a failed commit otherwise): checked before anything is sent.
+SPACE_SHORT_DESCRIPTION_MAX = 60
+SPACE_SDKS = {"gradio", "streamlit", "docker", "static"}
+SPACE_COLORS = {"red", "yellow", "green", "blue", "indigo", "purple", "pink", "gray"}
+SIZE_CATEGORIES = {"n<1K", "1K<n<10K", "10K<n<100K", "100K<n<1M", "1M<n<10M", "10M<n<100M", "100M<n<1B",
+                   "1B<n<10B", "10B<n<100B", "100B<n<1T", "n>1T"}
+
+
+def front_matter(text: str) -> dict | None:
+    """The YAML block between the leading `---` lines of a card, or None if there is none."""
+    import yaml
+    m = re.match(r"\A---\r?\n(.*?)\r?\n---\r?\n", text, flags=re.S)
+    if not m:
+        return None
+    data = yaml.safe_load(m.group(1))
+    return data if isinstance(data, dict) else {}
+
+
+def check_card(staged: list[Staged], rtype: str) -> list[str]:
+    """Metadata problems of the staged README.md that the Hub would reject (or misread)."""
+    card = next((s for s in staged if s.path == "README.md"), None)
+    if card is None:
+        return ["README.md: no card staged"]
+    try:
+        meta = front_matter(card.data.decode("utf-8"))
+    except Exception as exc:  # yaml.YAMLError and decoding errors alike
+        return [f"README.md: front matter is not valid YAML ({exc})"]
+    if meta is None:
+        return ["README.md: no YAML front matter"]
+    problems, paths = [], {s.path for s in staged}
+    if not meta.get("license"):
+        problems.append("README.md: `license` is missing")
+    elif meta["license"] == "other":
+        for key in ("license_name", "license_link"):
+            if not meta.get(key):
+                problems.append(f"README.md: license `other` needs `{key}`")
+        link = str(meta.get("license_link") or "")
+        if link and "://" not in link and link not in paths:
+            problems.append(f"README.md: license_link `{link}` is not among the staged files")
+    for cat in meta.get("size_categories") or []:
+        if cat not in SIZE_CATEGORIES:
+            problems.append(f"README.md: size_categories `{cat}` is not a Hub category")
+    if rtype == "space":
+        short = str(meta.get("short_description") or "")
+        if len(short) > SPACE_SHORT_DESCRIPTION_MAX:
+            problems.append(f"README.md: short_description has {len(short)} characters "
+                            f"(the Hub allows {SPACE_SHORT_DESCRIPTION_MAX})")
+        if meta.get("sdk") not in SPACE_SDKS:
+            problems.append(f"README.md: sdk `{meta.get('sdk')}` is not one of {sorted(SPACE_SDKS)}")
+        for key in ("colorFrom", "colorTo"):
+            if key in meta and meta[key] not in SPACE_COLORS:
+                problems.append(f"README.md: {key} `{meta[key]}` is not one of {sorted(SPACE_COLORS)}")
+        app = meta.get("app_file") or ("index.html" if meta.get("sdk") == "static" else None)
+        if app and app not in paths:
+            problems.append(f"README.md: app_file `{app}` is not among the staged files")
+    return problems
+
+
 # -- diff and upload ------------------------------------------------------------------------
 
 def remote_state(api, repo: str, rtype: str) -> tuple[dict[str, tuple[str, str]], str | None]:
@@ -458,6 +517,13 @@ def main(argv: list[str] | None = None) -> int:
             print("  " + p)
         return 1
     print(f"scan: clean ({len(staged)} files; secrets, user paths, e-mails, PutnamBench text)")
+    card_problems = check_card(staged, rtype)
+    if card_problems:
+        print("ERROR: the card metadata would be rejected by the Hub:")
+        for p in card_problems:
+            print("  " + p)
+        return 1
+    print("card: metadata within the Hub limits")
 
     api = HfApi()
     remote, head = remote_state(api, repo, rtype)

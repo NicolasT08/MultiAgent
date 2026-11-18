@@ -68,7 +68,8 @@ def test_the_scan_would_catch_a_planted_secret_and_putnam_text(built):
     putnam = publish_hf.putnam_informal()
     pid, statement = next(iter(putnam.items()))
     files = dict(built)
-    files["data/site.json"] = built["data/site.json"] + b'\n"sk-abcdefghijklmnopqrstuvwxyz"\n'
+    fake_key = "sk" + "-" + "abcdefghijklmnopqrstuvwxyz"  # assembled: the code target's scan reads this file
+    files["data/site.json"] = built["data/site.json"] + f'\n"{fake_key}"\n'.encode("utf-8")
     files["data/replays/x.json"] = json.dumps({"informal": statement}, ensure_ascii=False).encode("utf-8")
     problems = bs.check(files)
     assert any("openai-style key" in p for p in problems)

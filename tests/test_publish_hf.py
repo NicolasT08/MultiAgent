@@ -154,3 +154,54 @@ def test_setup_index_manifest_lists_the_retriever_files():
     assert man["repo_id"] == pub.REPOS["index"][0] and len(man["revision"]) == 40
     assert set(man["files"]) == set(pub.INDEX_FILES)
     assert all(len(v["sha256"]) == 64 and v["size"] > 0 for v in man["files"].values())
+
+
+# -- card metadata (limits the Hub enforces on upload) ---------------------------------------
+
+def _card(front: str, *extra: str) -> list:
+    staged = [pub.Staged("README.md", data=f"---\n{front}\n---\n\n# Title\n".encode("utf-8"))]
+    return staged + [pub.Staged(p, data=b"x") for p in extra]
+
+
+SPACE_OK = ("title: T\nemoji: ✅\ncolorFrom: indigo\ncolorTo: green\nsdk: static\napp_file: index.html\n"
+            "license: mit\nshort_description: " + "x" * 60)
+
+
+def test_space_short_description_limit_is_60_characters():
+    assert pub.check_card(_card(SPACE_OK, "index.html"), "space") == []
+    problems = pub.check_card(_card(SPACE_OK + "y", "index.html"), "space")
+    assert problems == ["README.md: short_description has 61 characters (the Hub allows 60)"]
+
+
+def test_space_card_checks_sdk_colors_and_app_file():
+    bad = SPACE_OK.replace("sdk: static", "sdk: html").replace("colorTo: green", "colorTo: teal")
+    problems = " ".join(pub.check_card(_card(bad), "space"))
+    assert "sdk `html`" in problems and "colorTo `teal`" in problems
+    assert "app_file `index.html`" in pub.check_card(_card(SPACE_OK), "space")[0]
+
+
+def test_dataset_card_checks_license_and_size_categories():
+    ok = "license: other\nlicense_name: mixed\nlicense_link: LICENSE.md\nsize_categories:\n- n<1K"
+    assert pub.check_card(_card(ok, "LICENSE.md"), "dataset") == []
+    assert "not among the staged files" in pub.check_card(_card(ok), "dataset")[0]
+    problems = pub.check_card(_card("license: other\nsize_categories:\n- 50<n<100"), "dataset")
+    assert len(problems) == 3  # license_name, license_link, size category
+    assert pub.check_card(_card("pretty_name: x"), "model") == ["README.md: `license` is missing"]
+    assert pub.check_card([pub.Staged("README.md", data=b"# no front matter\n")], "model") == \
+        ["README.md: no YAML front matter"]
+    assert "not valid YAML" in pub.check_card(_card("license: [mit"), "model")[0]
+
+
+def test_every_published_card_is_within_the_hub_limits():
+    """The cards as staged (code README front matter, both datasets, the Space)."""
+    code = [pub.Staged("README.md", data=(pub.CODE_FRONT_MATTER + "# formal-mas\n").encode("utf-8"))]
+    assert pub.check_card(code, "model") == []
+    for name, rtype, extra in (("formal-mas-eval.md", "dataset", ["LICENSE.md"]),
+                               ("formal-mas-index.md", "dataset", []),
+                               ("formal-mas-demo.md", "space", list(pub.SPACE_FILES))):
+        staged = [pub.Staged("README.md", data=(pub.CARDS / name).read_bytes())]
+        staged += [pub.Staged(p, data=b"x") for p in extra]
+        assert pub.check_card(staged, rtype) == [], name
+    meta = pub.front_matter((pub.CARDS / "formal-mas-demo.md").read_text(encoding="utf-8"))
+    assert meta["short_description"] == "Multi-agent olympiad prover verified by Lean 4 (replays)"
+    assert len(meta["short_description"]) == 56
